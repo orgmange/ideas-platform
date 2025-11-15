@@ -5,9 +5,9 @@ import (
 	"github.com/google/uuid"
 )
 
-type IUserUsecase interface {
-	CreateUser(*dto.CreateUserRequest) (*dto.UserResponse, error)
-	UpdateUser(*dto.UpdateUserRequest) error
+type UserUsecase interface {
+	UpdateUser(ID uuid.UUID, req *dto.UpdateUserRequest) error
+	GetAllUsers(page, limit int) ([]dto.UserResponse, error)
 	GetUser(ID uuid.UUID) (*dto.UserResponse, error)
 	DeleteUser(ID uuid.UUID) error
 }

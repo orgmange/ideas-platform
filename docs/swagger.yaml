@@ -1,0 +1,397 @@
+basePath: /api/v1
+definitions:
+  dto.CoffeeShopResponse:
+    properties:
+      address:
+        type: string
+      contacts:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      rules:
+        type: string
+      welcome_message:
+        type: string
+    type: object
+  dto.CreateCoffeeShopRequest:
+    properties:
+      address:
+        type: string
+      contacts:
+        type: string
+      name:
+        type: string
+      rules:
+        type: string
+      welcome_message:
+        type: string
+    type: object
+  dto.CreateUserRequest:
+    properties:
+      name:
+        type: string
+      phone:
+        type: string
+    type: object
+  dto.ErrorResponse:
+    properties:
+      message:
+        type: string
+    type: object
+  dto.UpdateCoffeeShopRequest:
+    properties:
+      address:
+        type: string
+      contacts:
+        type: string
+      name:
+        type: string
+      rules:
+        type: string
+      welcome_message:
+        type: string
+    type: object
+  dto.UpdateUserRequest:
+    properties:
+      name:
+        type: string
+    type: object
+  dto.UserResponse:
+    properties:
+      id:
+        type: string
+      name:
+        type: string
+      phone:
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: This is a sample server
+  termsOfService: http://swagger.io/terms/
+  title: Swagger Example API
+  version: "1.0"
+paths:
+  /coffee-shops:
+    get:
+      description: Get a list of all coffee shops with optional pagination
+      parameters:
+      - description: Page number
+        in: query
+        name: page
+        type: integer
+      - description: Number of items per page
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/dto.CoffeeShopResponse'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Get all coffee shops
+      tags:
+      - coffee-shops
+    post:
+      consumes:
+      - application/json
+      description: Create a new coffee shop with the provided information
+      parameters:
+      - description: Coffee shop information
+        in: body
+        name: coffee_shop
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CreateCoffeeShopRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/dto.CoffeeShopResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Create a new coffee shop
+      tags:
+      - coffee-shops
+  /coffee-shops/{id}:
+    delete:
+      description: Delete a coffee shop by ID
+      parameters:
+      - description: Coffee Shop ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Delete coffee shop by ID
+      tags:
+      - coffee-shops
+    get:
+      description: Get coffee shop details by ID
+      parameters:
+      - description: Coffee Shop ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.CoffeeShopResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Get coffee shop by ID
+      tags:
+      - coffee-shops
+    put:
+      consumes:
+      - application/json
+      description: Update coffee shop details for the given ID
+      parameters:
+      - description: Coffee Shop ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Coffee shop update information
+        in: body
+        name: coffee_shop
+        required: true
+        schema:
+          $ref: '#/definitions/dto.UpdateCoffeeShopRequest'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Update coffee shop by ID
+      tags:
+      - coffee-shops
+  /health:
+    get:
+      description: Check the health of the service
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Health Check
+      tags:
+      - health
+  /users:
+    get:
+      description: Get a list of all users with optional pagination
+      parameters:
+      - description: Page number
+        in: query
+        name: page
+        type: integer
+      - description: Number of items per page
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/dto.UserResponse'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Get all users
+      tags:
+      - users
+    post:
+      consumes:
+      - application/json
+      description: Create a new user with the provided information
+      parameters:
+      - description: User information
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CreateUserRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/dto.UserResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Create a new user
+      tags:
+      - users
+  /users/{id}:
+    delete:
+      description: Delete a user by user ID
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Delete user by ID
+      tags:
+      - users
+    get:
+      description: Get user details by user ID
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.UserResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Get user by ID
+      tags:
+      - users
+    put:
+      consumes:
+      - application/json
+      description: Update user details for the given user ID
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: User update information
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/dto.UpdateUserRequest'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Update user by ID
+      tags:
+      - users
+swagger: "2.0"

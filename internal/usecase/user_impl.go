@@ -7,60 +7,78 @@ import (
 	"github.com/google/uuid"
 )
 
-type UserUsecase struct {
-	rep repository.IUserRep
+type UserUsecaseImpl struct {
+	rep repository.UserRep
+}
+
+func NewUserUsecase(rep repository.UserRep) UserUsecase {
+	return &UserUsecaseImpl{rep: rep}
 }
 
 // DeleteUser implements IUserUsecase.
-func (u *UserUsecase) DeleteUser(ID uuid.UUID) error {
+func (u *UserUsecaseImpl) DeleteUser(ID uuid.UUID) error {
 	return u.rep.DeleteUser(ID)
 }
 
+// GetAllUsers implements IUserUsecase.
+func (u *UserUsecaseImpl) GetAllUsers(page int, limit int) ([]dto.UserResponse, error) {
+	if limit <= 0 || limit > 25 {
+		limit = 25
+	}
+	if page < 0 {
+		page = 0
+	}
+	users, err := u.rep.GetAllUsers(limit, limit*page)
+	if err != nil {
+		return nil, err
+	}
+	return toResponses(users), nil
+}
+
 // GetUser implements IUserUsecase.
-func (u *UserUsecase) GetUser(ID uuid.UUID) (*dto.UserResponse, error) {
+func (u *UserUsecaseImpl) GetUser(ID uuid.UUID) (*dto.UserResponse, error) {
 	user, err := u.rep.GetUser(ID)
 	if err != nil {
 		return nil, err
 	}
 
-	return toUserResponse(user), nil
+	return toResponse(user), nil
 }
 
 // UpdateUser implements IUserUsecase.
-func (u *UserUsecase) UpdateUser(req *dto.UpdateUserRequest) error {
-	user, err := u.rep.GetUser(req.ID)
+func (u *UserUsecaseImpl) UpdateUser(ID uuid.UUID, req *dto.UpdateUserRequest) error {
+	user, err := u.rep.GetUser(ID)
 	if err != nil {
 		return err
 	}
+
 	if req.Name != "" {
 		user.Name = req.Name
 	}
+
 	return u.rep.UpdateUser(user)
 }
 
-func NewUserUsecase(rep repository.IUserRep) IUserUsecase {
-	return &UserUsecase{rep: rep}
-}
-
-func (u *UserUsecase) CreateUser(req *dto.CreateUserRequest) (*dto.UserResponse, error) {
-	user := toUserModel(req)
-	createdUser, err := u.rep.CreateUser(user)
-	if err != nil {
-		return nil, err
-	}
-	return toUserResponse(createdUser), nil
-}
-
-func toUserResponse(user *models.User) *dto.UserResponse {
-	return &dto.UserResponse{
-		ID:   user.ID,
-		Name: user.Name,
-	}
-}
-
-func toUserModel(req *dto.CreateUserRequest) *models.User {
+func toUser(req *dto.CreateUserRequest) *models.User {
 	return &models.User{
 		Name:  req.Name,
 		Phone: req.Phone,
 	}
+}
+
+func toResponse(user *models.User) *dto.UserResponse {
+	return &dto.UserResponse{
+		ID:    user.ID,
+		Name:  user.Name,
+		Phone: user.Phone,
+	}
+}
+
+func toResponses(users []models.User) []dto.UserResponse {
+	res := make([]dto.UserResponse, len(users))
+	for i := range users {
+		res[i] = *toResponse(&users[i])
+	}
+
+	return res
 }

@@ -5,10 +5,10 @@ import (
 	"github.com/google/uuid"
 )
 
-type IUserRep interface {
-	CreateUser(*models.User) (*models.User, error)
+type UserRep interface {
 	UpdateUser(*models.User) error
 	DeleteUser(ID uuid.UUID) error
 	GetUser(ID uuid.UUID) (*models.User, error)
 	GetAllUsers(limit, offset int) ([]models.User, error)
+	IsUserExist(ID uuid.UUID) (bool, error)
 }

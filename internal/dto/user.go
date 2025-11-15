@@ -8,11 +8,11 @@ type CreateUserRequest struct {
 }
 
 type UpdateUserRequest struct {
-	ID   uuid.UUID
 	Name string
 }
 
 type UserResponse struct {
-	ID   uuid.UUID
-	Name string
+	ID    uuid.UUID
+	Name  string
+	Phone string
 }
