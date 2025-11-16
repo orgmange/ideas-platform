@@ -30,11 +30,18 @@ func NewAuthUsecase(rep repository.AuthRepository, jwtSecret string) AuthUsecase
 
 // GetOTP implements AuthUsecase.
 func (a *AuthUsecaseImpl) GetOTP(phone string) error {
-	if GetOTP, _ := a.rep.GetOTP(phone); GetOTP != nil {
-		err := a.rep.DeleteOTP(phone)
+	savedOTP, err := a.rep.GetOTP(phone)
+	var errNotFound *apperrors.ErrNotFound
+	if err != nil && !errors.As(err, &errNotFound) {
+		return err
+	}
+	if savedOTP != nil {
+		err = a.checkRateLimit(savedOTP)
 		if err != nil {
 			return err
 		}
+
+		a.updateResendCount(savedOTP)
 	}
 	code, err := generateCode()
 	if err != nil {
@@ -45,14 +52,8 @@ func (a *AuthUsecaseImpl) GetOTP(phone string) error {
 	if err != nil {
 		return err
 	}
-	otp := models.OTP{
-		Phone:        phone,
-		CodeHash:     hashedCode,
-		ExpiresAt:    time.Now().Add(5 * time.Minute),
-		AttemptsLeft: 3,
-		CreatedAt:    time.Now(),
-	}
-	err = a.rep.CreateOTP(&otp)
+
+	err = a.saveOTP(savedOTP, hashedCode, phone)
 	if err != nil {
 		return err
 	}
@@ -62,6 +63,50 @@ func (a *AuthUsecaseImpl) GetOTP(phone string) error {
 	}
 
 	return nil
+}
+
+func (*AuthUsecaseImpl) checkRateLimit(savedOTP *models.OTP) error {
+	untilNextCode := time.Until(savedOTP.NextAllowedAt).Seconds()
+	if untilNextCode > 0 {
+		return apperrors.NewAuthErr(
+			fmt.Sprintf("wait %d seconds before requesting new code",
+				int(untilNextCode)))
+	}
+	return nil
+}
+
+func (a *AuthUsecaseImpl) saveOTP(savedOTP *models.OTP, hashedCode string, phone string) error {
+	if savedOTP != nil {
+		savedOTP.ExpiresAt = time.Now().Add(time.Minute * 5)
+		savedOTP.AttemptsLeft = 3
+		savedOTP.CodeHash = hashedCode
+
+		err := a.rep.UpdateOTP(savedOTP)
+		if err != nil {
+			return err
+		}
+	} else {
+		err := a.createOTP(phone, hashedCode)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (*AuthUsecaseImpl) updateResendCount(savedOTP *models.OTP) {
+	if time.Now().After(savedOTP.ExpiresAt.Add(24 * time.Hour)) {
+		savedOTP.ResendCount = 0
+	} else {
+		savedOTP.ResendCount++
+		if savedOTP.ResendCount < 3 {
+			savedOTP.NextAllowedAt = time.Now().Add(time.Minute * 1)
+		} else if savedOTP.ResendCount >= 3 && savedOTP.ResendCount < 5 {
+			savedOTP.NextAllowedAt = time.Now().Add(time.Minute * 30)
+		} else {
+			savedOTP.NextAllowedAt = time.Now().Add(time.Hour * 24)
+		}
+	}
 }
 
 // VerifyOTP implements AuthUsecase.
@@ -75,7 +120,6 @@ func (a *AuthUsecaseImpl) VerifyOTP(req *dto.VerifyOTPRequest) (*string, error) 
 	}
 	savedOTP.AttemptsLeft--
 	defer a.rep.UpdateOTP(savedOTP)
-	// остановился тут, осталось доделать rate limit, refresh token
 	err = bcrypt.CompareHashAndPassword([]byte(savedOTP.CodeHash), []byte(req.OTP))
 	if err != nil {
 		return nil, apperrors.NewAuthErr("invalid credentials")
@@ -155,4 +199,21 @@ func (a *AuthUsecaseImpl) createUser(req *dto.VerifyOTPRequest) (*uuid.UUID, err
 	}
 
 	return id, nil
+}
+
+func (a *AuthUsecaseImpl) createOTP(phone, hashedCode string) error {
+	otp := models.OTP{
+		Phone:         phone,
+		CodeHash:      hashedCode,
+		ExpiresAt:     time.Now().Add(5 * time.Minute),
+		AttemptsLeft:  3,
+		NextAllowedAt: time.Now().Add(time.Minute * 1),
+		ResendCount:   0,
+		CreatedAt:     time.Now(),
+	}
+	err := a.rep.CreateOTP(&otp)
+	if err != nil {
+		return err
+	}
+	return nil
 }

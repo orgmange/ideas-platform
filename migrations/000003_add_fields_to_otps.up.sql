@@ -1,0 +1,2 @@
+ALTER TABLE otps ADD COLUMN resend_count INTEGER DEFAULT 0;
+ALTER TABLE otps ADD COLUMN next_allowed_at TIMESTAMP;

@@ -1,0 +1,2 @@
+ALTER TABLE otps
+ALTER COLUMN next_allowed_at TYPE TIMESTAMP;

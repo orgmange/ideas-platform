@@ -18,6 +18,9 @@ func NewAuthRepository(db *gorm.DB) AuthRepository {
 func (r *authRepository) GetOTP(phone string) (*models.OTP, error) {
 	var otp models.OTP
 	if err := r.db.Where("phone = ? AND verified = ?", phone, false).First(&otp).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, apperrors.NewErrNotFound("user", phone)
+		}
 		return nil, err
 	}
 	return &otp, nil
