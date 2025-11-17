@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math/rand"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -76,16 +77,16 @@ func (suite *RouterTestSuite) SetupSuite() {
 	userUsecase := usecase.NewUserUsecase(suite.userRepository)
 	userHandler := handlers.NewUserHandler(userUsecase, logger)
 
-	coffeeShopRepo := repository.NewCoffeeShopRepository(sqlDB)
+	coffeeShopRepo := repository.NewCoffeeShopRepository(suite.DB)
 	csUscase := usecase.NewCoffeeShopUsecase(coffeeShopRepo)
 	csHandler := handlers.NewCoffeeShopHandler(csUscase, logger)
 
 	authRepo := repository.NewAuthRepository(suite.DB)
-	authUsecase := usecase.NewAuthUsecase(authRepo, "1234567890")
+	authUsecase := usecase.NewAuthUsecase(authRepo, "test-secret")
 	authHandler := handlers.NewAuthHandler(authUsecase, logger)
 	suite.authRepo = authRepo
 
-	appRouter := router.NewRouter(suite.cfg, userHandler, csHandler, authHandler)
+	appRouter := router.NewRouter(suite.cfg, userHandler, csHandler, authHandler, authUsecase, logger)
 	suite.Router = appRouter.SetupRouter()
 }
 
@@ -107,6 +108,70 @@ func TestRouterTestSuite(t *testing.T) {
 	suite.Run(t, new(RouterTestSuite))
 }
 
+func (suite *RouterTestSuite) makeAuthenticatedRequest(req routerTestRequest, token string) *httptest.ResponseRecorder {
+	w := httptest.NewRecorder()
+	var bodyReader *bytes.Buffer
+
+	if req.body != nil {
+		bodyBytes, err := json.Marshal(req.body)
+		suite.Require().NoError(err)
+		bodyReader = bytes.NewBuffer(bodyBytes)
+	} else {
+		bodyReader = bytes.NewBuffer(nil)
+	}
+
+	httpReq, err := http.NewRequest(req.method, req.path, bodyReader)
+	suite.Require().NoError(err)
+
+	if req.contentType != "" {
+		httpReq.Header.Set("Content-Type", req.contentType)
+	}
+	httpReq.Header.Set("Authorization", "Bearer "+token)
+
+	suite.Router.ServeHTTP(w, httpReq)
+	return w
+}
+
+func (suite *RouterTestSuite) getAuthToken() string {
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	phone := fmt.Sprintf("7%09d", r.Intn(1000000000)) // unique 10-digit phone
+	otpCode := "123456"
+	name := "Test User"
+
+	hashedCode, err := bcrypt.GenerateFromPassword([]byte(otpCode), bcrypt.DefaultCost)
+	suite.Require().NoError(err)
+
+	otp := &models.OTP{
+		Phone:        phone,
+		CodeHash:     string(hashedCode),
+		ExpiresAt:    time.Now().Add(5 * time.Minute),
+		AttemptsLeft: 3,
+	}
+	err = suite.DB.Create(otp).Error
+	suite.Require().NoError(err)
+
+	reqBody := dto.VerifyOTPRequest{
+		Phone: phone,
+		OTP:   otpCode,
+		Name:  name,
+	}
+
+	w := suite.makeRequest(routerTestRequest{
+		method:      http.MethodPost,
+		path:        "/api/v1/auth",
+		body:        reqBody,
+		contentType: "application/json",
+	})
+	suite.Require().Equal(http.StatusOK, w.Code, "Failed to get auth token. Body: %s", w.Body.String())
+
+	var authResponse dto.AuthResponse
+	err = json.Unmarshal(w.Body.Bytes(), &authResponse)
+	suite.Require().NoError(err)
+	suite.Require().NotEmpty(authResponse.AccessToken)
+
+	return authResponse.AccessToken
+}
+
 func (suite *RouterTestSuite) TestHealthCheck() {
 	tests := []struct {
 		name           string
@@ -125,88 +190,9 @@ func (suite *RouterTestSuite) TestHealthCheck() {
 	for _, test := range tests {
 		test := test
 		suite.Run(test.name, func() {
-			testRequest := testRequest{
+			testRequest := routerTestRequest{
 				method: "GET",
 				path:   "/health",
-			}
-			w := suite.makeRequest(testRequest)
-			suite.Equal(test.expectedStatus, w.Code)
-			test.checkResponse(w.Body.Bytes())
-		})
-	}
-}
-
-func (suite *RouterTestSuite) TestVerifyOTP() {
-	tests := []struct {
-		name           string
-		setup          func(phone, otpCode string)
-		input          dto.VerifyOTPRequest
-		expectedStatus int
-		checkResponse  func(body []byte)
-	}{
-		{
-			name: "valid new user",
-			setup: func(phone, otpCode string) {
-				hashedCode, _ := bcrypt.GenerateFromPassword([]byte(otpCode), bcrypt.DefaultCost)
-				otp := &models.OTP{
-					Phone:        phone,
-					CodeHash:     string(hashedCode),
-					ExpiresAt:    time.Now().Add(5 * time.Minute),
-					AttemptsLeft: 3,
-				}
-				suite.DB.Create(otp)
-			},
-			input: dto.VerifyOTPRequest{
-				Name:  "testuser",
-				Phone: "1234567890",
-				OTP:   "123456",
-			},
-			expectedStatus: http.StatusOK,
-			checkResponse: func(body []byte) {
-				var token dto.AuthResponse
-				err := json.Unmarshal(body, &token)
-				suite.NoError(err)
-				suite.NotEmpty(token.AccessToken)
-				suite.NotEmpty(token.RefreshToken)
-			},
-		},
-		{
-			name: "missing name",
-			setup: func(phone, otpCode string) {
-				hashedCode, _ := bcrypt.GenerateFromPassword([]byte(otpCode), bcrypt.DefaultCost)
-				otp := &models.OTP{
-					Phone:        phone,
-					CodeHash:     string(hashedCode),
-					ExpiresAt:    time.Now().Add(5 * time.Minute),
-					AttemptsLeft: 3,
-				}
-				suite.DB.Create(otp)
-			},
-			input: dto.VerifyOTPRequest{
-				Name:  "",
-				Phone: "1111111111",
-				OTP:   "111111",
-			},
-			expectedStatus: http.StatusBadRequest,
-			checkResponse: func(body []byte) {
-				var response map[string]string
-				err := json.Unmarshal(body, &response)
-				suite.NoError(err)
-				suite.Contains(response["error"], "name can't be empty")
-			},
-		},
-	}
-
-	for _, test := range tests {
-		test := test
-		suite.Run(test.name, func() {
-			suite.TearDownTest()
-			test.setup(test.input.Phone, test.input.OTP)
-			testRequest := testRequest{
-				method:      "POST",
-				path:        "/api/v1/auth",
-				body:        test.input,
-				contentType: "application/json",
 			}
 			w := suite.makeRequest(testRequest)
 			suite.Equal(test.expectedStatus, w.Code)
@@ -257,7 +243,7 @@ func (suite *RouterTestSuite) TestGetAllUsers() {
 		suite.Run(test.name, func() {
 			suite.TearDownTest() // Clean DB before each sub-test
 			test.setup()
-			testRequest := testRequest{
+			testRequest := routerTestRequest{
 				method: "GET",
 				path:   "/api/v1/users",
 			}
@@ -313,7 +299,7 @@ func (suite *RouterTestSuite) TestGetUser() {
 		test := test
 		suite.Run(test.name, func() {
 			userID := test.setup()
-			testRequest := testRequest{
+			testRequest := routerTestRequest{
 				method: "GET",
 				path:   fmt.Sprintf("/api/v1/users/%s", userID),
 			}
@@ -346,7 +332,7 @@ func (suite *RouterTestSuite) TestUpdateUser() {
 			checkResponse: func(w *httptest.ResponseRecorder, userID string) {
 				suite.Empty(w.Body.Bytes())
 
-				getResp := suite.makeRequest(testRequest{
+				getResp := suite.makeRequest(routerTestRequest{
 					method: "GET",
 					path:   fmt.Sprintf("/api/v1/users/%s", userID),
 				})
@@ -380,13 +366,14 @@ func (suite *RouterTestSuite) TestUpdateUser() {
 		test := test
 		suite.Run(test.name, func() {
 			userID := test.setup()
-			testRequest := testRequest{
+			token := suite.getAuthToken()
+			testRequest := routerTestRequest{
 				method:      "PUT",
 				path:        fmt.Sprintf("/api/v1/users/%s", userID),
 				body:        test.input,
 				contentType: "application/json",
 			}
-			w := suite.makeRequest(testRequest)
+			w := suite.makeAuthenticatedRequest(testRequest, token)
 			suite.Equal(test.expectedStatus, w.Code)
 			test.checkResponse(w, userID)
 		})
@@ -427,25 +414,26 @@ func (suite *RouterTestSuite) TestDeleteUser() {
 		test := test
 		suite.Run(test.name, func() {
 			userID := test.setup()
-			testRequest := testRequest{
+			token := suite.getAuthToken()
+			testRequest := routerTestRequest{
 				method: "DELETE",
 				path:   fmt.Sprintf("/api/v1/users/%s", userID),
 			}
-			w := suite.makeRequest(testRequest)
+			w := suite.makeAuthenticatedRequest(testRequest, token)
 			suite.Equal(test.expectedStatus, w.Code)
 			test.checkResponse(w)
 		})
 	}
 }
 
-type testRequest struct {
+type routerTestRequest struct {
 	method      string
 	path        string
 	body        interface{}
 	contentType string
 }
 
-func (suite *RouterTestSuite) makeRequest(req testRequest) *httptest.ResponseRecorder {
+func (suite *RouterTestSuite) makeRequest(req routerTestRequest) *httptest.ResponseRecorder {
 	w := httptest.NewRecorder()
 	var bodyReader *bytes.Buffer
 

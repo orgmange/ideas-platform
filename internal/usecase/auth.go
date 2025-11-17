@@ -11,4 +11,5 @@ type AuthUsecase interface {
 	Refresh(token string) (*dto.AuthResponse, error)
 	Logout(token string) error
 	LogoutEverywhere(userID uuid.UUID) error
+	ValidateJWTToken(tokenString string) (*dto.JWTClaims, error)
 }

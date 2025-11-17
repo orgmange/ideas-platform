@@ -1,5 +1,12 @@
 basePath: /api/v1
 definitions:
+  dto.AuthResponse:
+    properties:
+      access_token:
+        type: string
+      refresh_token:
+        type: string
+    type: object
   dto.CoffeeShopResponse:
     properties:
       address:
@@ -28,17 +35,56 @@ definitions:
       welcome_message:
         type: string
     type: object
-  dto.CreateUserRequest:
+  dto.CreateIdeaRequest:
     properties:
-      name:
+      category_id:
         type: string
-      phone:
+      coffee_shop_id:
+        type: string
+      description:
+        type: string
+      image_url:
+        type: string
+      title:
         type: string
     type: object
   dto.ErrorResponse:
     properties:
-      message:
+      error:
         type: string
+    type: object
+  dto.IdeaResponse:
+    properties:
+      category_id:
+        type: string
+      coffee_shop_id:
+        type: string
+      creator_id:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      image_url:
+        type: string
+      status_id:
+        type: string
+      title:
+        type: string
+    type: object
+  dto.LogoutRequest:
+    properties:
+      refresh_token:
+        type: string
+    required:
+    - refresh_token
+    type: object
+  dto.RefreshRequest:
+    properties:
+      refresh_token:
+        type: string
+    required:
+    - refresh_token
     type: object
   dto.UpdateCoffeeShopRequest:
     properties:
@@ -51,6 +97,19 @@ definitions:
       rules:
         type: string
       welcome_message:
+        type: string
+    type: object
+  dto.UpdateIdeaRequest:
+    properties:
+      category_id:
+        type: string
+      description:
+        type: string
+      image_url:
+        type: string
+      status_id:
+        type: string
+      title:
         type: string
     type: object
   dto.UpdateUserRequest:
@@ -67,6 +126,15 @@ definitions:
       phone:
         type: string
     type: object
+  dto.VerifyOTPRequest:
+    properties:
+      name:
+        type: string
+      otp:
+        type: string
+      phone:
+        type: string
+    type: object
 host: localhost:8080
 info:
   contact: {}
@@ -75,6 +143,154 @@ info:
   title: Swagger Example API
   version: "1.0"
 paths:
+  /auth:
+    post:
+      consumes:
+      - application/json
+      description: Verify One-Time Password and authenticate user
+      parameters:
+      - description: OTP verification request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.VerifyOTPRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.AuthResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Verify OTP
+      tags:
+      - auth
+  /auth/{phone}:
+    get:
+      description: Get One-Time Password for phone number
+      parameters:
+      - description: Phone number
+        in: path
+        name: phone
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Get OTP
+      tags:
+      - auth
+  /auth/logout:
+    post:
+      consumes:
+      - application/json
+      description: Logout user by invalidating refresh token
+      parameters:
+      - description: Logout request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.LogoutRequest'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Logout
+      tags:
+      - auth
+  /auth/logout-everywhere:
+    post:
+      description: Logout user from all devices by invalidating all refresh tokens
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Logout Everywhere
+      tags:
+      - auth
+  /auth/refresh:
+    post:
+      consumes:
+      - application/json
+      description: Refresh access token using a refresh token
+      parameters:
+      - description: Refresh token request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.RefreshRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.AuthResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Refresh Access Token
+      tags:
+      - auth
   /coffee-shops:
     get:
       description: Get a list of all coffee shops with optional pagination
@@ -129,6 +345,8 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
       summary: Create a new coffee shop
       tags:
       - coffee-shops
@@ -158,6 +376,8 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
       summary: Delete coffee shop by ID
       tags:
       - coffee-shops
@@ -224,9 +444,52 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
       summary: Update coffee shop by ID
       tags:
       - coffee-shops
+  /coffee-shops/{shop_id}/ideas:
+    get:
+      description: Get a list of all ideas for a given coffee shop with optional pagination
+      parameters:
+      - description: Coffee Shop ID
+        in: path
+        name: shop_id
+        required: true
+        type: string
+      - description: Page number
+        in: query
+        name: page
+        type: integer
+      - description: Number of items per page
+        in: query
+        name: limit
+        type: integer
+      - description: Sort order
+        in: query
+        name: sort
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/dto.IdeaResponse'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Get all ideas by shop
+      tags:
+      - ideas
   /health:
     get:
       description: Check the health of the service
@@ -242,6 +505,137 @@ paths:
       summary: Health Check
       tags:
       - health
+  /ideas:
+    post:
+      consumes:
+      - application/json
+      description: Create a new idea for a coffee shop
+      parameters:
+      - description: Idea information
+        in: body
+        name: idea
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CreateIdeaRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/dto.IdeaResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Create a new idea
+      tags:
+      - ideas
+  /ideas/{id}:
+    delete:
+      description: Delete an idea by ID
+      parameters:
+      - description: Idea ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Delete idea by ID
+      tags:
+      - ideas
+    get:
+      description: Get idea details by ID
+      parameters:
+      - description: Idea ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.IdeaResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Get idea by ID
+      tags:
+      - ideas
+    put:
+      consumes:
+      - application/json
+      description: Update idea details for the given ID
+      parameters:
+      - description: Idea ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Idea update information
+        in: body
+        name: idea
+        required: true
+        schema:
+          $ref: '#/definitions/dto.UpdateIdeaRequest'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Update idea by ID
+      tags:
+      - ideas
   /users:
     get:
       description: Get a list of all users with optional pagination
@@ -270,35 +664,6 @@ paths:
       summary: Get all users
       tags:
       - users
-    post:
-      consumes:
-      - application/json
-      description: Create a new user with the provided information
-      parameters:
-      - description: User information
-        in: body
-        name: user
-        required: true
-        schema:
-          $ref: '#/definitions/dto.CreateUserRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/dto.UserResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/dto.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/dto.ErrorResponse'
-      summary: Create a new user
-      tags:
-      - users
   /users/{id}:
     delete:
       description: Delete a user by user ID
@@ -325,6 +690,8 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
       summary: Delete user by ID
       tags:
       - users
@@ -391,7 +758,75 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
       summary: Update user by ID
       tags:
       - users
+  /users/me:
+    get:
+      description: Get details of the currently authenticated user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.UserResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Get current authenticated user
+      tags:
+      - users
+  /users/me/ideas:
+    get:
+      description: Get a list of all ideas for a given user with optional pagination
+      parameters:
+      - description: Page number
+        in: query
+        name: page
+        type: integer
+      - description: Number of items per page
+        in: query
+        name: limit
+        type: integer
+      - description: Sort order
+        in: query
+        name: sort
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/dto.IdeaResponse'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Get all ideas by user
+      tags:
+      - ideas
+securityDefinitions:
+  ApiKeyAuth:
+    in: header
+    name: Authorization
+    type: apiKey
 swagger: "2.0"

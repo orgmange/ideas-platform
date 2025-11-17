@@ -1,6 +1,7 @@
 package usecase
 
 import (
+	apperrors "github.com/GeorgiiMalishev/ideas-platform/internal/app_errors"
 	"github.com/GeorgiiMalishev/ideas-platform/internal/dto"
 	"github.com/GeorgiiMalishev/ideas-platform/internal/models"
 	"github.com/GeorgiiMalishev/ideas-platform/internal/repository"
@@ -15,8 +16,9 @@ func NewCoffeeShopUsecase(rep repository.CoffeeShopRep) CoffeeShopUsecase {
 	return &CoffeeShopUsecaseImpl{rep: rep}
 }
 
-func (u *CoffeeShopUsecaseImpl) CreateCoffeeShop(req *dto.CreateCoffeeShopRequest) (*dto.CoffeeShopResponse, error) {
+func (u *CoffeeShopUsecaseImpl) CreateCoffeeShop(userID uuid.UUID, req *dto.CreateCoffeeShopRequest) (*dto.CoffeeShopResponse, error) {
 	shop := toCoffeeShop(req)
+	shop.CreatorID = userID
 	createdShop, err := u.rep.CreateCoffeeShop(shop)
 	if err != nil {
 		return nil, err
@@ -25,7 +27,11 @@ func (u *CoffeeShopUsecaseImpl) CreateCoffeeShop(req *dto.CreateCoffeeShopReques
 	return toCoffeeShopResponse(createdShop), nil
 }
 
-func (u *CoffeeShopUsecaseImpl) DeleteCoffeeShop(ID uuid.UUID) error {
+func (u *CoffeeShopUsecaseImpl) DeleteCoffeeShop(userID uuid.UUID, ID uuid.UUID) error {
+	_, err := u.getIfCreator(userID, ID)
+	if err != nil {
+		return err
+	}
 	return u.rep.DeleteCoffeeShop(ID)
 }
 
@@ -52,8 +58,8 @@ func (u *CoffeeShopUsecaseImpl) GetCoffeeShop(ID uuid.UUID) (*dto.CoffeeShopResp
 	return toCoffeeShopResponse(shop), nil
 }
 
-func (u *CoffeeShopUsecaseImpl) UpdateCoffeeShop(ID uuid.UUID, req *dto.UpdateCoffeeShopRequest) error {
-	shop, err := u.rep.GetCoffeeShop(ID)
+func (u *CoffeeShopUsecaseImpl) UpdateCoffeeShop(userID uuid.UUID, ID uuid.UUID, req *dto.UpdateCoffeeShopRequest) error {
+	shop, err := u.getIfCreator(userID, ID)
 	if err != nil {
 		return err
 	}
@@ -107,3 +113,13 @@ func toCoffeeShopResponses(shops []models.CoffeeShop) []dto.CoffeeShopResponse {
 	return res
 }
 
+func (u *CoffeeShopUsecaseImpl) getIfCreator(userID uuid.UUID, shopID uuid.UUID) (*models.CoffeeShop, error) {
+	shop, err := u.rep.GetCoffeeShop(shopID)
+	if err != nil {
+		return nil, err
+	}
+	if userID != shop.CreatorID {
+		return nil, apperrors.NewAuthErr("access denied")
+	}
+	return shop, nil
+}

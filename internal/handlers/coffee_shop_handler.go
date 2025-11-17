@@ -29,6 +29,7 @@ func NewCoffeeShopHandler(uc usecase.CoffeeShopUsecase, logger *slog.Logger) *Co
 // @Failure 400 {object} dto.ErrorResponse
 // @Failure 500 {object} dto.ErrorResponse
 // @Router /coffee-shops [post]
+// @Security ApiKeyAuth
 func (h *CoffeeShopHandler) CreateCoffeeShop(c *gin.Context) {
 	var req dto.CreateCoffeeShopRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -36,9 +37,13 @@ func (h *CoffeeShopHandler) CreateCoffeeShop(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	resp, err := h.coffeeShopUsecase.CreateCoffeeShop(&req)
+	userID, ok := parseUserIDFromContext(c)
+	if !ok {
+		return
+	}
+	resp, err := h.coffeeShopUsecase.CreateCoffeeShop(userID, &req)
 	if err != nil {
-		handleAppErrors(err, h.logger, c)
+		HandleAppErrors(err, h.logger, c)
 		return
 	}
 
@@ -64,7 +69,7 @@ func (h *CoffeeShopHandler) GetAllCoffeeShops(c *gin.Context) {
 
 	resp, err := h.coffeeShopUsecase.GetAllCoffeeShops(page, limit)
 	if err != nil {
-		handleAppErrors(err, h.logger, c)
+		HandleAppErrors(err, h.logger, c)
 		return
 	}
 	c.JSON(http.StatusOK, resp)
@@ -85,9 +90,9 @@ func (h *CoffeeShopHandler) GetCoffeeShop(c *gin.Context) {
 	if !ok {
 		return
 	}
-	shop, err := h.coffeeShopUsecase.GetCoffeeShop(*uuid)
+	shop, err := h.coffeeShopUsecase.GetCoffeeShop(uuid)
 	if err != nil {
-		handleAppErrors(err, h.logger, c)
+		HandleAppErrors(err, h.logger, c)
 		return
 	}
 	c.JSON(http.StatusOK, shop)
@@ -105,6 +110,7 @@ func (h *CoffeeShopHandler) GetCoffeeShop(c *gin.Context) {
 // @Failure 404 {object} dto.ErrorResponse
 // @Failure 500 {object} dto.ErrorResponse
 // @Router /coffee-shops/{id} [put]
+// @Security ApiKeyAuth
 func (h *CoffeeShopHandler) UpdateCoffeeShop(c *gin.Context) {
 	uuid, ok := parseUUID(h.logger, c)
 	if !ok {
@@ -116,10 +122,13 @@ func (h *CoffeeShopHandler) UpdateCoffeeShop(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "bad request"})
 		return
 	}
-
-	err := h.coffeeShopUsecase.UpdateCoffeeShop(*uuid, &req)
+	userID, ok := parseUserIDFromContext(c)
+	if !ok {
+		return
+	}
+	err := h.coffeeShopUsecase.UpdateCoffeeShop(userID, uuid, &req)
 	if err != nil {
-		handleAppErrors(err, h.logger, c)
+		HandleAppErrors(err, h.logger, c)
 		return
 	}
 
@@ -136,15 +145,19 @@ func (h *CoffeeShopHandler) UpdateCoffeeShop(c *gin.Context) {
 // @Failure 404 {object} dto.ErrorResponse
 // @Failure 500 {object} dto.ErrorResponse
 // @Router /coffee-shops/{id} [delete]
+// @Security ApiKeyAuth
 func (h *CoffeeShopHandler) DeleteCoffeeShop(c *gin.Context) {
 	uuid, ok := parseUUID(h.logger, c)
 	if !ok {
 		return
 	}
-
-	err := h.coffeeShopUsecase.DeleteCoffeeShop(*uuid)
+	userID, ok := parseUserIDFromContext(c)
+	if !ok {
+		return
+	}
+	err := h.coffeeShopUsecase.DeleteCoffeeShop(userID, uuid)
 	if err != nil {
-		handleAppErrors(err, h.logger, c)
+		HandleAppErrors(err, h.logger, c)
 		return
 	}
 

@@ -1,64 +1,56 @@
 package repository
 
 import (
-	"database/sql"
+	"errors"
 	"fmt"
 
 	apperrors "github.com/GeorgiiMalishev/ideas-platform/internal/app_errors"
 	"github.com/GeorgiiMalishev/ideas-platform/internal/models"
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 type CoffeeShopRepImpl struct {
-	db *sql.DB
+	db *gorm.DB
 }
 
-func NewCoffeeShopRepository(db *sql.DB) CoffeeShopRep {
+func NewCoffeeShopRepository(db *gorm.DB) CoffeeShopRep {
 	return &CoffeeShopRepImpl{db: db}
 }
 
 func (r *CoffeeShopRepImpl) CreateCoffeeShop(shop *models.CoffeeShop) (*models.CoffeeShop, error) {
-	query := `INSERT INTO coffee_shop (name, address, contacts, welcome_message, rules) 
-			   VALUES ($1, $2, $3, $4, $5) 
-			   RETURNING id, name, address, contacts, welcome_message, rules, updated_at, created_at`
-	var createdShop models.CoffeeShop
-	err := r.db.QueryRow(query, shop.Name, shop.Address, shop.Contacts, shop.WelcomeMessage, shop.Rules).
-		Scan(&createdShop.ID, &createdShop.Name, &createdShop.Address, &createdShop.Contacts, &createdShop.WelcomeMessage, &createdShop.Rules, &createdShop.UpdatedAt, &createdShop.CreatedAt)
-	if err != nil {
+	if err := r.db.Create(shop).Error; err != nil {
 		return nil, err
 	}
-	return &createdShop, nil
+	return shop, nil
 }
 
 func (r *CoffeeShopRepImpl) UpdateCoffeeShop(shop *models.CoffeeShop) error {
-	query := `UPDATE coffee_shop 
-			   SET name = $1, address = $2, contacts = $3, welcome_message = $4, rules = $5, updated_at = NOW() 
-			   WHERE id = $6`
-	_, err := r.db.Exec(query, shop.Name, shop.Address, shop.Contacts, shop.WelcomeMessage, shop.Rules, shop.ID)
-	if err == sql.ErrNoRows {
+	result := r.db.Save(shop)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
 		return apperrors.NewErrNotFound("coffee_shop", shop.ID.String())
 	}
-	return err
+	return nil
 }
 
 func (r *CoffeeShopRepImpl) DeleteCoffeeShop(ID uuid.UUID) error {
-	query := `DELETE FROM coffee_shop WHERE id = $1`
-	_, err := r.db.Exec(query, ID)
-	if err == sql.ErrNoRows {
+	result := r.db.Delete(&models.CoffeeShop{}, ID)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
 		return apperrors.NewErrNotFound("coffee_shop", ID.String())
 	}
-	return err
+	return nil
 }
 
 func (r *CoffeeShopRepImpl) GetCoffeeShop(ID uuid.UUID) (*models.CoffeeShop, error) {
-	query := `SELECT id, name, address, contacts, welcome_message, rules, updated_at, created_at 
-			   FROM coffee_shop 
-			   WHERE id = $1`
 	var shop models.CoffeeShop
-	err := r.db.QueryRow(query, ID).
-		Scan(&shop.ID, &shop.Name, &shop.Address, &shop.Contacts, &shop.WelcomeMessage, &shop.Rules, &shop.UpdatedAt, &shop.CreatedAt)
-	if err != nil {
-		if err == sql.ErrNoRows {
+	if err := r.db.First(&shop, "id = ?", ID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, apperrors.NewErrNotFound("coffee_shop", ID.String())
 		}
 		return nil, err
@@ -67,33 +59,18 @@ func (r *CoffeeShopRepImpl) GetCoffeeShop(ID uuid.UUID) (*models.CoffeeShop, err
 }
 
 func (r *CoffeeShopRepImpl) GetAllCoffeeShops(limit, offset int) ([]models.CoffeeShop, error) {
-	query := `SELECT id, name, address, contacts, welcome_message, rules, updated_at, created_at 
-			   FROM coffee_shop
-			   LIMIT $1 OFFSET $2`
-	rows, err := r.db.Query(query, limit, offset)
-	if err != nil {
+	var shops []models.CoffeeShop
+	if err := r.db.Limit(limit).Offset(offset).Find(&shops).Error; err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var shops []models.CoffeeShop
-	for rows.Next() {
-		var shop models.CoffeeShop
-		if err := rows.Scan(&shop.ID, &shop.Name, &shop.Address, &shop.Contacts, &shop.WelcomeMessage, &shop.Rules, &shop.UpdatedAt, &shop.CreatedAt); err != nil {
-			return nil, err
-		}
-		shops = append(shops, shop)
-	}
-
 	return shops, nil
 }
 
 func (r *CoffeeShopRepImpl) IsCoffeeShopExist(ID uuid.UUID) (bool, error) {
-	query := `SELECT EXISTS(SELECT 1 FROM coffee_shop WHERE id = $1)`
-	var exists bool
-	err := r.db.QueryRow(query, ID).Scan(&exists)
+	var count int64
+	err := r.db.Model(&models.CoffeeShop{}).Where("id = ?", ID).Count(&count).Error
 	if err != nil {
 		return false, fmt.Errorf("failed to check coffee shop existence: %w", err)
 	}
-	return exists, nil
+	return count > 0, nil
 }

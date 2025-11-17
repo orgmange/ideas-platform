@@ -7,19 +7,27 @@ import (
 )
 
 type Reward struct {
-	ID           uuid.UUID
-	ReceiverID   *uuid.UUID
-	CoffeeShopID *uuid.UUID
-	IdeaID       *uuid.UUID
-	RewardTypeID *uuid.UUID
-	IsActivated  bool
+	ID           uuid.UUID `gorm:"primaryKey;type:uuid;default:gen_random_uuid()"`
+	ReceiverID   *uuid.UUID `gorm:"foreignKey:ReceiverID"`
+	CoffeeShopID *uuid.UUID `gorm:"foreignKey:CoffeeShopID"`
+	IdeaID       *uuid.UUID `gorm:"foreignKey:IdeaID"`
+	RewardTypeID *uuid.UUID `gorm:"foreignKey:RewardTypeID"`
+	IsActivated  bool        `gorm:"default:false"`
 	GivenAt      *time.Time
-	CreatedAt    time.Time
+	CreatedAt    time.Time `gorm:"autoCreateTime"`
+}
+
+func (Reward) TableName() string {
+	return "reward"
 }
 
 type RewardType struct {
-	ID           uuid.UUID
-	CoffeeShopID *uuid.UUID
-	Description  string
-	CreatedAt    time.Time
+	ID           uuid.UUID `gorm:"primaryKey;type:uuid;default:gen_random_uuid()"`
+	CoffeeShopID *uuid.UUID `gorm:"foreignKey:CoffeeShopID"`
+	Description  string      `gorm:"not null"`
+	CreatedAt    time.Time   `gorm:"autoCreateTime"`
+}
+
+func (RewardType) TableName() string {
+	return "reward_type"
 }

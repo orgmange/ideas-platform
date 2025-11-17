@@ -267,7 +267,7 @@ func (a *AuthUsecaseImpl) createRefreshToken(userID uuid.UUID, oldTokenString st
 	return &newTokenString, nil
 }
 
-func (a *AuthUsecaseImpl) parseClaims(tokenString string) (*dto.JWTClaims, error) {
+func (a *AuthUsecaseImpl) ValidateJWTToken(tokenString string) (*dto.JWTClaims, error) {
 	var claims dto.JWTClaims
 	token, err := jwt.ParseWithClaims(tokenString, &claims, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {

@@ -74,7 +74,7 @@ func (suite *AuthIntegrationTestSuite) SetupSuite() {
 	csUscase := usecase.NewCoffeeShopUsecase(coffeeShopRepo)
 	csHandler := handlers.NewCoffeeShopHandler(csUscase, logger)
 
-	appRouter := router.NewRouter(suite.cfg, userHandler, csHandler, authHandler)
+	appRouter := router.NewRouter(suite.cfg, userHandler, csHandler, authHandler, authUsecase, logger)
 	suite.Router = appRouter.SetupRouter()
 }
 
@@ -96,14 +96,14 @@ func TestAuthIntegrationTestSuite(t *testing.T) {
 	suite.Run(t, new(AuthIntegrationTestSuite))
 }
 
-type testRequest struct {
+type authTestRequest struct {
 	method      string
 	path        string
 	body        interface{}
 	contentType string
 }
 
-func (suite *AuthIntegrationTestSuite) makeRequest(req testRequest) *httptest.ResponseRecorder {
+func (suite *AuthIntegrationTestSuite) makeRequest(req authTestRequest) *httptest.ResponseRecorder {
 	w := httptest.NewRecorder()
 	var bodyReader *bytes.Buffer
 
@@ -129,7 +129,7 @@ func (suite *AuthIntegrationTestSuite) makeRequest(req testRequest) *httptest.Re
 func (suite *AuthIntegrationTestSuite) TestGetOTP() {
 	phone := "1234567890"
 
-	req := testRequest{
+	req := authTestRequest{
 		method: http.MethodGet,
 		path:   fmt.Sprintf("/api/v1/auth/%s", phone),
 	}
@@ -162,7 +162,7 @@ func (suite *AuthIntegrationTestSuite) TestVerifyOTP_NewUser() {
 		Name:  "Test User",
 	}
 
-	req := testRequest{
+	req := authTestRequest{
 		method:      http.MethodPost,
 		path:        "/api/v1/auth",
 		body:        reqBody,
@@ -209,7 +209,7 @@ func (suite *AuthIntegrationTestSuite) TestVerifyOTP_ExistingUser() {
 		OTP:   otpCode,
 	}
 
-	req := testRequest{
+	req := authTestRequest{
 		method:      http.MethodPost,
 		path:        "/api/v1/auth",
 		body:        reqBody,
@@ -244,7 +244,7 @@ func (suite *AuthIntegrationTestSuite) TestVerifyOTP_InvalidOTP() {
 		OTP:   "000000", // Invalid OTP
 	}
 
-	req := testRequest{
+	req := authTestRequest{
 		method:      http.MethodPost,
 		path:        "/api/v1/auth",
 		body:        reqBody,
@@ -280,7 +280,7 @@ func (suite *AuthIntegrationTestSuite) TestRefresh() {
 		Phone: phone,
 		OTP:   otpCode,
 	}
-	verifyReq := testRequest{
+	verifyReq := authTestRequest{
 		method:      http.MethodPost,
 		path:        "/api/v1/auth",
 		body:        verifyReqBody,
@@ -300,7 +300,7 @@ func (suite *AuthIntegrationTestSuite) TestRefresh() {
 	refreshReqBody := dto.RefreshRequest{
 		RefreshToken: authResp.RefreshToken,
 	}
-	refreshReq := testRequest{
+	refreshReq := authTestRequest{
 		method:      http.MethodPost,
 		path:        "/api/v1/auth/refresh",
 		body:        refreshReqBody,
@@ -316,6 +316,158 @@ func (suite *AuthIntegrationTestSuite) TestRefresh() {
 	suite.NotNil(newAuthResponse)
 	suite.NotEmpty(newAuthResponse.AccessToken)
 	suite.NotEmpty(newAuthResponse.RefreshToken)
-	suite.NotEqual(authResp.AccessToken, newAuthResponse.AccessToken)
-	suite.NotEqual(authResp.RefreshToken, newAuthResponse.RefreshToken)
-}
+		suite.NotEqual(authResp.AccessToken, newAuthResponse.AccessToken)
+		suite.NotEqual(authResp.RefreshToken, newAuthResponse.RefreshToken)
+	}
+	
+	func (suite *AuthIntegrationTestSuite) TestGetCurrentAuthentificatedUser_Authorized() {
+		phone := "111222333"
+		otpCode := "123456"
+		userName := "Test User"
+	
+		// 1. Create user and get tokens
+			token := suite.getAuthToken(phone, otpCode, userName)
+		
+			// 2. Make request to /users/me
+			req := authTestRequest{
+				method: http.MethodGet,
+				path:   "/api/v1/users/me",
+			}
+			w := suite.makeAuthenticatedRequest(req, token)	
+		// 3. Assert response
+		suite.Equal(http.StatusOK, w.Code)
+	
+		var userResponse dto.UserResponse
+		err := json.Unmarshal(w.Body.Bytes(), &userResponse)
+		suite.NoError(err)
+		suite.Equal(userName, userResponse.Name)
+		suite.Equal(phone, userResponse.Phone)
+	}
+	
+	func (suite *AuthIntegrationTestSuite) TestGetCurrentAuthentificatedUser_Unauthorized() {
+		req := authTestRequest{
+			method: http.MethodGet,
+			path:   "/api/v1/users/me",
+		}
+		w := suite.makeRequest(req)
+		suite.Equal(http.StatusUnauthorized, w.Code)
+	}	
+	func (suite *AuthIntegrationTestSuite) TestLogout() {
+		// 1. Get auth token
+			token := suite.getAuthToken("1234567890", "123456", "Test User")
+		
+			// 2. Logout
+			logoutReq := authTestRequest{
+				method: http.MethodPost,
+				path:   "/api/v1/logout",
+			}
+			w := suite.makeAuthenticatedRequest(logoutReq, token)
+			suite.Equal(http.StatusNoContent, w.Code)
+		
+			// 3. Verify token is invalidated
+			meReq := authTestRequest{
+				method: http.MethodGet,
+				path:   "/api/v1/users/me",
+			}
+			w = suite.makeAuthenticatedRequest(meReq, token)
+			suite.Equal(http.StatusUnauthorized, w.Code)
+		}	
+	func (suite *AuthIntegrationTestSuite) TestLogoutEverywhere() {
+		phone := "1112223334"
+		otpCode := "123123"
+		userName := "Logout Everywhere"
+	
+		// 1. Get first token
+		token1 := suite.getAuthToken(phone, otpCode, userName)
+		time.Sleep(1 * time.Second) // ensure refresh token is different
+		// 2. Get second token (simulating another login)
+			token2 := suite.getAuthToken(phone, otpCode, userName)
+		
+			// 3. Logout from all devices using the first token
+			logoutReq := authTestRequest{
+				method: http.MethodPost,
+				path:   "/api/v1/logout-everywhere",
+			}
+			w := suite.makeAuthenticatedRequest(logoutReq, token1)
+			suite.Equal(http.StatusNoContent, w.Code)
+		
+			// 4. Verify both tokens are invalidated
+			meReq := authTestRequest{
+				method: http.MethodGet,
+				path:   "/api/v1/users/me",
+			}
+			w1 := suite.makeAuthenticatedRequest(meReq, token1)
+			suite.Equal(http.StatusUnauthorized, w1.Code)
+		
+			w2 := suite.makeAuthenticatedRequest(meReq, token2)
+			suite.Equal(http.StatusUnauthorized, w2.Code)
+		}	
+	// Helper to make authenticated requests
+	func (suite *AuthIntegrationTestSuite) makeAuthenticatedRequest(req authTestRequest, token string) *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		var bodyReader *bytes.Buffer
+	
+		if req.body != nil {
+			bodyBytes, err := json.Marshal(req.body)
+			suite.Require().NoError(err)
+			bodyReader = bytes.NewBuffer(bodyBytes)
+		} else {
+			bodyReader = bytes.NewBuffer(nil)
+		}
+	
+		httpReq, err := http.NewRequest(req.method, req.path, bodyReader)
+		suite.Require().NoError(err)
+	
+		if req.contentType != "" {
+			httpReq.Header.Set("Content-Type", req.contentType)
+		}
+		httpReq.Header.Set("Authorization", "Bearer "+token)
+	
+		suite.Router.ServeHTTP(w, httpReq)
+		return w
+	}	
+	// Helper to get a valid auth token
+	func (suite *AuthIntegrationTestSuite) getAuthToken(phone, otpCode, name string) string {
+		hashedCode, _ := bcrypt.GenerateFromPassword([]byte(otpCode), bcrypt.DefaultCost)
+	
+		// Ensure user exists or is created
+		var user models.User
+		err := suite.DB.First(&user, "phone = ?", phone).Error
+		if err != nil {
+			if err == gorm.ErrRecordNotFound {
+				_, err = suite.authRepo.CreateUser(&models.User{Name: name, Phone: phone})
+				suite.Require().NoError(err)
+			} else {
+				suite.Require().NoError(err)
+			}
+		}
+	
+		otp := &models.OTP{
+			Phone:        phone,
+			CodeHash:     string(hashedCode),
+			ExpiresAt:    time.Now().Add(5 * time.Minute),
+			AttemptsLeft: 3,
+		}
+		suite.DB.Create(otp)
+	
+			reqBody := dto.VerifyOTPRequest{
+				Phone: phone,
+				OTP:   otpCode,
+				Name:  name,
+			}
+		
+			req := authTestRequest{
+				method:      http.MethodPost,
+				path:        "/api/v1/auth",
+				body:        reqBody,
+				contentType: "application/json",
+			}
+			w := suite.makeRequest(req)	
+		suite.Require().Equal(http.StatusOK, w.Code)
+	
+		var authResponse dto.AuthResponse
+		err = json.Unmarshal(w.Body.Bytes(), &authResponse)
+		suite.Require().NoError(err)
+		return authResponse.AccessToken
+	}
+	

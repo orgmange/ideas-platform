@@ -40,7 +40,7 @@ func (h UserHandler) GetAllUsers(c *gin.Context) {
 
 	resp, err := h.uc.GetAllUsers(page, limit)
 	if err != nil {
-		handleAppErrors(err, h.logger, c)
+		HandleAppErrors(err, h.logger, c)
 	}
 	c.JSON(http.StatusOK, resp)
 }
@@ -60,9 +60,9 @@ func (h UserHandler) GetUser(c *gin.Context) {
 	if !ok {
 		return
 	}
-	user, err := h.uc.GetUser(*uuid)
+	user, err := h.uc.GetUser(uuid)
 	if err != nil {
-		handleAppErrors(err, h.logger, c)
+		HandleAppErrors(err, h.logger, c)
 		return
 	}
 	c.JSON(http.StatusOK, user)
@@ -80,6 +80,7 @@ func (h UserHandler) GetUser(c *gin.Context) {
 // @Failure 404 {object} dto.ErrorResponse
 // @Failure 500 {object} dto.ErrorResponse
 // @Router /users/{id} [put]
+// @Security ApiKeyAuth
 func (h UserHandler) UpdateUser(c *gin.Context) {
 	uuid, ok := parseUUID(h.logger, c)
 	if !ok {
@@ -93,9 +94,9 @@ func (h UserHandler) UpdateUser(c *gin.Context) {
 		return
 	}
 
-	err = h.uc.UpdateUser(*uuid, &req)
+	err = h.uc.UpdateUser(uuid, &req)
 	if err != nil {
-		handleAppErrors(err, h.logger, c)
+		HandleAppErrors(err, h.logger, c)
 		return
 	}
 
@@ -112,16 +113,41 @@ func (h UserHandler) UpdateUser(c *gin.Context) {
 // @Failure 404 {object} dto.ErrorResponse
 // @Failure 500 {object} dto.ErrorResponse
 // @Router /users/{id} [delete]
+// @Security ApiKeyAuth
 func (h UserHandler) DeleteUser(c *gin.Context) {
 	uuid, ok := parseUUID(h.logger, c)
 	if !ok {
 		return
 	}
 
-	err := h.uc.DeleteUser(*uuid)
+	err := h.uc.DeleteUser(uuid)
 	if err != nil {
-		handleAppErrors(err, h.logger, c)
+		HandleAppErrors(err, h.logger, c)
 	}
 
 	c.Status(http.StatusNoContent)
+}
+
+// @Summary Get current authenticated user
+// @Description Get details of the currently authenticated user
+// @Tags users
+// @Produce json
+// @Success 200 {object} dto.UserResponse
+// @Failure 401 {object} dto.ErrorResponse "Unauthorized"
+// @Failure 500 {object} dto.ErrorResponse "Internal Server Error"
+// @Router /users/me [get]
+// @Security ApiKeyAuth
+func (h UserHandler) GetCurrentAuthentificatedUser(c *gin.Context) {
+	userID, ok := parseUserIDFromContext(c)
+	if !ok {
+		return
+	}
+
+	userResp, err := h.uc.GetUser(userID)
+	if err != nil {
+		HandleAppErrors(err, h.logger, c)
+		return
+	}
+
+	c.JSON(http.StatusOK, userResp)
 }

@@ -6,11 +6,12 @@ import (
 	"net/http"
 
 	apperrors "github.com/GeorgiiMalishev/ideas-platform/internal/app_errors"
+	"github.com/GeorgiiMalishev/ideas-platform/internal/dto"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
 
-func handleAppErrors(err error, logger *slog.Logger, c *gin.Context) {
+func HandleAppErrors(err error, logger *slog.Logger, c *gin.Context) {
 	var errNotFound *apperrors.ErrNotFound
 	var errNotValid *apperrors.ErrNotValid
 	var authErr *apperrors.AuthErr
@@ -30,14 +31,30 @@ func handleAppErrors(err error, logger *slog.Logger, c *gin.Context) {
 	c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 }
 
-func parseUUID(logger *slog.Logger, c *gin.Context) (*uuid.UUID, bool) {
+func parseUUID(logger *slog.Logger, c *gin.Context) (uuid.UUID, bool) {
 	uuidRaw := c.Param("id")
-	uuid, err := uuid.Parse(uuidRaw)
+	id, err := uuid.Parse(uuidRaw)
 	if err != nil {
 		logger.Error("invalid uuid: ", slog.String("error", err.Error()))
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid uuid"})
-		return nil, false
+		return uuid.Nil, false
 	}
 
-	return &uuid, true
+	return id, true
+}
+
+func parseUserIDFromContext(c *gin.Context) (uuid.UUID, bool) {
+	userIDAny, exist := c.Get("user_id")
+	if !exist {
+		c.JSON(http.StatusUnauthorized, dto.ErrorResponse{Message: "user not authorized"})
+		return uuid.Nil, false
+	}
+
+	userID, ok := userIDAny.(uuid.UUID)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Message: "internal server error"})
+		return uuid.Nil, false
+	}
+
+	return userID, true
 }

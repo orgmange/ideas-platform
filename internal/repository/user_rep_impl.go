@@ -1,58 +1,44 @@
 package repository
 
 import (
-	"database/sql"
 	"fmt"
 
 	apperrors "github.com/GeorgiiMalishev/ideas-platform/internal/app_errors"
 	"github.com/GeorgiiMalishev/ideas-platform/internal/models"
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 type UserRepImpl struct {
-	db *sql.DB
+	db *gorm.DB
 }
 
-// CreateUser implements IUserRep.
+func NewUserRepository(db *gorm.DB) UserRep {
+	return &UserRepImpl{db: db}
+}
 
-// DeleteUser implements IUserRep.
-func (u UserRepImpl) DeleteUser(ID uuid.UUID) error {
-	query := `UPDATE users SET is_deleted = true WHERE id = $1`
-	_, err := u.db.Exec(query, ID)
-	if err == sql.ErrNoRows {
+func (u *UserRepImpl) DeleteUser(ID uuid.UUID) error {
+	result := u.db.Model(&models.User{}).Where("id = ?", ID).Update("is_deleted", true)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
 		return apperrors.NewErrNotFound("user", ID.String())
 	}
-	return err
+	return nil
 }
 
-// GetAllUsers implements IUserRep.
-func (u UserRepImpl) GetAllUsers(limit int, offset int) ([]models.User, error) {
-	query := `SELECT id, name, phone, role_id, is_deleted, updated_at, created_at FROM users WHERE is_deleted = false LIMIT $1 OFFSET $2`
-	rows, err := u.db.Query(query, limit, offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
+func (u *UserRepImpl) GetAllUsers(limit int, offset int) ([]models.User, error) {
 	var users []models.User
-	for rows.Next() {
-		var user models.User
-		if err := rows.Scan(&user.ID, &user.Name, &user.Phone, &user.RoleID, &user.IsDeleted, &user.UpdatedAt, &user.CreatedAt); err != nil {
-			return nil, err
-		}
-		users = append(users, user)
-	}
-
-	return users, nil
+	err := u.db.Where("is_deleted = ?", false).Limit(limit).Offset(offset).Find(&users).Error
+	return users, err
 }
 
-// GetUser implements IUserRep.
-func (u UserRepImpl) GetUser(ID uuid.UUID) (*models.User, error) {
-	query := `SELECT id, name, phone, role_id, is_deleted, updated_at, created_at FROM users WHERE id = $1 AND is_deleted = false`
+func (u *UserRepImpl) GetUser(ID uuid.UUID) (*models.User, error) {
 	var user models.User
-	err := u.db.QueryRow(query, ID).Scan(&user.ID, &user.Name, &user.Phone, &user.RoleID, &user.IsDeleted, &user.UpdatedAt, &user.CreatedAt)
+	err := u.db.Where("id = ? AND is_deleted = ?", ID, false).First(&user).Error
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if err == gorm.ErrRecordNotFound {
 			return nil, apperrors.NewErrNotFound("user", ID.String())
 		}
 		return nil, err
@@ -60,28 +46,16 @@ func (u UserRepImpl) GetUser(ID uuid.UUID) (*models.User, error) {
 	return &user, nil
 }
 
-// UpdateUser implements IUserRep.
-func (u UserRepImpl) UpdateUser(user *models.User) error {
-	query := `UPDATE users SET name = $1, phone = $2, role_id = $3, updated_at = NOW() WHERE id = $4`
-	_, err := u.db.Exec(query, user.Name, user.Phone, user.RoleID, user.ID)
-	if err == sql.ErrNoRows {
-		return apperrors.NewErrNotFound("user", user.ID.String())
-	}
-	return err
+func (u *UserRepImpl) UpdateUser(user *models.User) error {
+	return u.db.Save(user).Error
 }
 
-func (u UserRepImpl) IsUserExist(ID uuid.UUID) (bool, error) {
-	query := `SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)`
-
-	var exists bool
-	err := u.db.QueryRow(query, ID).Scan(&exists)
+func (u *UserRepImpl) IsUserExist(ID uuid.UUID) (bool, error) {
+	var count int64
+	err := u.db.Model(&models.User{}).Where("id = ?", ID).Count(&count).Error
 	if err != nil {
 		return false, fmt.Errorf("failed to check user existence: %w", err)
 	}
-
-	return exists, nil
+	return count > 0, nil
 }
 
-func NewUserRepository(db *sql.DB) UserRep {
-	return &UserRepImpl{db: db}
-}

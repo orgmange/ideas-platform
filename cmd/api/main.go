@@ -9,6 +9,7 @@ import (
 	_ "github.com/GeorgiiMalishev/ideas-platform/docs"
 	"github.com/GeorgiiMalishev/ideas-platform/internal/db"
 	"github.com/GeorgiiMalishev/ideas-platform/internal/handlers"
+	"github.com/GeorgiiMalishev/ideas-platform/internal/models"
 	"github.com/GeorgiiMalishev/ideas-platform/internal/repository"
 	"github.com/GeorgiiMalishev/ideas-platform/internal/router"
 	"github.com/GeorgiiMalishev/ideas-platform/internal/usecase"
@@ -21,6 +22,9 @@ import (
 
 // @BasePath /api/v1
 // @host localhost:8080
+// @securityDefinitions.apikey ApiKeyAuth
+// @in header
+// @name Authorization
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
@@ -28,10 +32,6 @@ func main() {
 		return
 	}
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{}))
-	err = db.RunMigrations("file://migrations", cfg)
-	if err != nil {
-		logger.Error("Failed to run migrations:", slog.String("error", err.Error()))
-	}
 
 	db, err := db.InitDB(cfg)
 	if err != nil {
@@ -39,23 +39,31 @@ func main() {
 		return
 	}
 
-	sqlDB, err := db.DB()
+	err = db.AutoMigrate(
+		&models.User{},
+		&models.BannedUser{},
+		&models.Role{},
+		&models.CoffeeShop{},
+		&models.WorkerCoffeeShop{},
+		&models.Category{},
+		&models.Idea{},
+		&models.IdeaLike{},
+		&models.IdeaComment{},
+		&models.Reward{},
+		&models.RewardType{},
+		&models.OTP{},
+		&models.UserRefreshToken{},
+	)
 	if err != nil {
-		logger.Error("Failed to get sql.DB from gorm.DB:", slog.String("error", err.Error()))
+		logger.Error("Failed to auto-migrate database:", slog.String("error", err.Error()))
 		return
 	}
 
-	defer sqlDB.Close()
-	if err = sqlDB.Ping(); err != nil {
-		logger.Error("Failed to ping database:", slog.String("error", err.Error()))
-		return
-	}
-
-	userRepo := repository.NewUserRepository(sqlDB)
+	userRepo := repository.NewUserRepository(db)
 	userUsecase := usecase.NewUserUsecase(userRepo)
 	userHandler := handlers.NewUserHandler(userUsecase, logger)
 
-	coffeeShopRepo := repository.NewCoffeeShopRepository(sqlDB)
+	coffeeShopRepo := repository.NewCoffeeShopRepository(db)
 	csUscase := usecase.NewCoffeeShopUsecase(coffeeShopRepo)
 	csHandler := handlers.NewCoffeeShopHandler(csUscase, logger)
 
@@ -63,7 +71,7 @@ func main() {
 	authUsecase := usecase.NewAuthUsecase(authRepo, "1234567890")
 	authHandler := handlers.NewAuthHandler(authUsecase, logger)
 
-	ar := router.NewRouter(cfg, userHandler, csHandler, authHandler)
+	ar := router.NewRouter(cfg, userHandler, csHandler, authHandler, authUsecase, logger)
 	r := ar.SetupRouter()
 	err = r.Run(":8080")
 	if err != nil {

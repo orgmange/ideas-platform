@@ -1,0 +1,1 @@
+ALTER TABLE coffee_shop ADD COLUMN creator_id UUID REFERENCES users(id);
