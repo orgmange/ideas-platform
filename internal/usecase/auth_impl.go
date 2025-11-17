@@ -10,6 +10,7 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/GeorgiiMalishev/ideas-platform/config"
 	apperrors "github.com/GeorgiiMalishev/ideas-platform/internal/app_errors"
 	"github.com/GeorgiiMalishev/ideas-platform/internal/dto"
 	"github.com/GeorgiiMalishev/ideas-platform/internal/models"
@@ -22,12 +23,14 @@ import (
 type AuthUsecaseImpl struct {
 	rep       repository.AuthRepository
 	jwtSecret string
+	authCfg   *config.AuthConfig
 }
 
-func NewAuthUsecase(rep repository.AuthRepository, jwtSecret string) AuthUsecase {
+func NewAuthUsecase(rep repository.AuthRepository, jwtSecret string, authCfg *config.AuthConfig) AuthUsecase {
 	return &AuthUsecaseImpl{
 		rep:       rep,
 		jwtSecret: jwtSecret,
+		authCfg:   authCfg,
 	}
 }
 
@@ -80,8 +83,8 @@ func (*AuthUsecaseImpl) checkRateLimit(savedOTP *models.OTP) error {
 
 func (a *AuthUsecaseImpl) saveOTP(savedOTP *models.OTP, hashedCode string, phone string) error {
 	if savedOTP != nil {
-		savedOTP.ExpiresAt = time.Now().Add(time.Minute * 5)
-		savedOTP.AttemptsLeft = 3
+		savedOTP.ExpiresAt = time.Now().Add(a.authCfg.OTPConfig.ExpiresAtTimer)
+		savedOTP.AttemptsLeft = a.authCfg.OTPConfig.AttemptsLeft
 		savedOTP.CodeHash = hashedCode
 
 		err := a.rep.UpdateOTP(savedOTP)
@@ -97,17 +100,17 @@ func (a *AuthUsecaseImpl) saveOTP(savedOTP *models.OTP, hashedCode string, phone
 	return nil
 }
 
-func (*AuthUsecaseImpl) updateResendCount(savedOTP *models.OTP) {
-	if time.Now().After(savedOTP.ExpiresAt.Add(24 * time.Hour)) {
+func (a *AuthUsecaseImpl) updateResendCount(savedOTP *models.OTP) {
+	if time.Now().After(savedOTP.ExpiresAt.Add(a.authCfg.OTPConfig.ResetResendCountTimer)) {
 		savedOTP.ResendCount = 0
 	} else {
 		savedOTP.ResendCount++
-		if savedOTP.ResendCount < 3 {
-			savedOTP.NextAllowedAt = time.Now().Add(time.Minute * 1)
-		} else if savedOTP.ResendCount >= 3 && savedOTP.ResendCount < 5 {
-			savedOTP.NextAllowedAt = time.Now().Add(time.Minute * 30)
+		if savedOTP.ResendCount < a.authCfg.OTPConfig.SoftAttemptsCount {
+			savedOTP.NextAllowedAt = time.Now().Add(a.authCfg.OTPConfig.SubSoftAttemptsTimer)
+		} else if savedOTP.ResendCount >= a.authCfg.OTPConfig.SoftAttemptsCount && savedOTP.ResendCount < a.authCfg.OTPConfig.HardAttemptsCount {
+			savedOTP.NextAllowedAt = time.Now().Add(a.authCfg.OTPConfig.SubHardAttemptsTimer)
 		} else {
-			savedOTP.NextAllowedAt = time.Now().Add(time.Hour * 24)
+			savedOTP.NextAllowedAt = time.Now().Add(a.authCfg.OTPConfig.PostHardAttemptsCount)
 		}
 	}
 }
@@ -122,9 +125,9 @@ func (a *AuthUsecaseImpl) VerifyOTP(req *dto.VerifyOTPRequest) (*dto.AuthRespons
 		return nil, apperrors.NewAuthErr("too much attempts")
 	}
 	savedOTP.AttemptsLeft--
-	defer a.rep.UpdateOTP(savedOTP)
 	err = bcrypt.CompareHashAndPassword([]byte(savedOTP.CodeHash), []byte(req.OTP))
 	if err != nil {
+		a.rep.UpdateOTP(savedOTP)
 		return nil, apperrors.NewAuthErr("invalid credentials")
 	}
 
@@ -140,7 +143,10 @@ func (a *AuthUsecaseImpl) VerifyOTP(req *dto.VerifyOTPRequest) (*dto.AuthRespons
 			return nil, err
 		}
 	}
-
+	err = a.rep.DeleteOTP(req.Phone)
+	if err != nil {
+		return nil, err
+	}
 	return a.makeAuthResponse(*id, "")
 }
 
@@ -193,9 +199,9 @@ func (a *AuthUsecaseImpl) createOTP(phone, hashedCode string) error {
 	otp := models.OTP{
 		Phone:         phone,
 		CodeHash:      hashedCode,
-		ExpiresAt:     time.Now().Add(5 * time.Minute),
+		ExpiresAt:     time.Now().Add(a.authCfg.OTPConfig.ExpiresAtTimer),
 		AttemptsLeft:  3,
-		NextAllowedAt: time.Now().Add(time.Minute * 1),
+		NextAllowedAt: time.Now().Add(a.authCfg.OTPConfig.SubSoftAttemptsTimer),
 		ResendCount:   0,
 		CreatedAt:     time.Now(),
 	}
@@ -258,7 +264,7 @@ func (a *AuthUsecaseImpl) createRefreshToken(userID uuid.UUID, oldTokenString st
 	err = a.rep.CreateRefreshToken(&models.UserRefreshToken{
 		UserID:       userID,
 		RefreshToken: hashedToken,
-		ExpiresAt:    time.Now().Add(time.Hour * 24 * 30),
+		ExpiresAt:    time.Now().Add(a.authCfg.JWTConfig.RefreshTokenTimer),
 	})
 	if err != nil {
 		return nil, err
@@ -310,7 +316,7 @@ func (a *AuthUsecaseImpl) createJWTToken(userID uuid.UUID) (*string, error) {
 		UserID: userID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Minute * 15)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(a.authCfg.JWTConfig.JWTTokenTimer)),
 		},
 	}
 

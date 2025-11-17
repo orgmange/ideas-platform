@@ -68,7 +68,7 @@ func main() {
 	csHandler := handlers.NewCoffeeShopHandler(csUscase, logger)
 
 	authRepo := repository.NewAuthRepository(db)
-	authUsecase := usecase.NewAuthUsecase(authRepo, "1234567890")
+	authUsecase := usecase.NewAuthUsecase(authRepo, "1234567890", &cfg.AuthConfig)
 	authHandler := handlers.NewAuthHandler(authUsecase, logger)
 
 	ar := router.NewRouter(cfg, userHandler, csHandler, authHandler, authUsecase, logger)

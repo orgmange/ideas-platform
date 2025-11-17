@@ -107,7 +107,7 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 // @Failure 400 {object} dto.ErrorResponse "Bad Request"
 // @Failure 401 {object} dto.ErrorResponse "Unauthorized"
 // @Failure 500 {object} dto.ErrorResponse "Internal Server Error"
-// @Router /auth/logout [post]
+// @Router /logout [post]
 // @Security ApiKeyAuth
 func (h *AuthHandler) Logout(c *gin.Context) {
 	var logoutReq dto.LogoutRequest
@@ -133,7 +133,7 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 // @Success 204 "No Content"
 // @Failure 401 {object} dto.ErrorResponse "Unauthorized"
 // @Failure 500 {object} dto.ErrorResponse "Internal Server Error"
-// @Router /auth/logout-everywhere [post]
+// @Router /logout-everywhere [post]
 // @Security ApiKeyAuth
 func (h *AuthHandler) LogoutEverywhere(c *gin.Context) {
 	userID, ok := parseUserIDFromContext(c)

@@ -202,61 +202,6 @@ paths:
       summary: Get OTP
       tags:
       - auth
-  /auth/logout:
-    post:
-      consumes:
-      - application/json
-      description: Logout user by invalidating refresh token
-      parameters:
-      - description: Logout request
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/dto.LogoutRequest'
-      produces:
-      - application/json
-      responses:
-        "204":
-          description: No Content
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/dto.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/dto.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/dto.ErrorResponse'
-      security:
-      - ApiKeyAuth: []
-      summary: Logout
-      tags:
-      - auth
-  /auth/logout-everywhere:
-    post:
-      description: Logout user from all devices by invalidating all refresh tokens
-      produces:
-      - application/json
-      responses:
-        "204":
-          description: No Content
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/dto.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/dto.ErrorResponse'
-      security:
-      - ApiKeyAuth: []
-      summary: Logout Everywhere
-      tags:
-      - auth
   /auth/refresh:
     post:
       consumes:
@@ -636,6 +581,61 @@ paths:
       summary: Update idea by ID
       tags:
       - ideas
+  /logout:
+    post:
+      consumes:
+      - application/json
+      description: Logout user by invalidating refresh token
+      parameters:
+      - description: Logout request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.LogoutRequest'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Logout
+      tags:
+      - auth
+  /logout-everywhere:
+    post:
+      description: Logout user from all devices by invalidating all refresh tokens
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Logout Everywhere
+      tags:
+      - auth
   /users:
     get:
       description: Get a list of all users with optional pagination

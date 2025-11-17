@@ -2,15 +2,17 @@ package config
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/caarlos0/env/v11"
 	"github.com/joho/godotenv"
 )
 
 type Config struct {
-	Server ServerConfig
-	DB     DBConfig
-	App    AppConfig
+	Server     ServerConfig
+	DB         DBConfig
+	App        AppConfig
+	AuthConfig AuthConfig
 }
 
 type ServerConfig struct {
@@ -30,6 +32,27 @@ type DBConfig struct {
 type AppConfig struct {
 	Env     string `env:"APP_ENV" envDefault:"development"`
 	Version string `env:"APP_VERSION,required"`
+}
+
+type AuthConfig struct {
+	OTPConfig OTPConfig
+	JWTConfig JWTConfig
+}
+
+type OTPConfig struct {
+	ExpiresAtTimer        time.Duration
+	AttemptsLeft          int
+	ResetResendCountTimer time.Duration
+	SoftAttemptsCount     int
+	HardAttemptsCount     int
+	SubSoftAttemptsTimer  time.Duration
+	SubHardAttemptsTimer  time.Duration
+	PostHardAttemptsCount time.Duration
+}
+
+type JWTConfig struct {
+	RefreshTokenTimer time.Duration
+	JWTTokenTimer     time.Duration
 }
 
 func Load() (*Config, error) {
