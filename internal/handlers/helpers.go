@@ -15,16 +15,22 @@ func HandleAppErrors(err error, logger *slog.Logger, c *gin.Context) {
 	var errNotFound *apperrors.ErrNotFound
 	var errNotValid *apperrors.ErrNotValid
 	var authErr *apperrors.AuthErr
+	var errRateLimit *apperrors.ErrRateLimit
 	if errors.As(err, &errNotFound) {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		c.JSON(http.StatusNotFound, &dto.ErrorResponse{Message: err.Error()})
 		return
 	}
 	if errors.As(err, &errNotValid) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, &dto.ErrorResponse{Message: err.Error()})
 		return
 	}
 	if errors.As(err, &authErr) {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		c.JSON(http.StatusUnauthorized, &dto.ErrorResponse{Message: err.Error()})
+		return
+	}
+	if errors.As(err, &errRateLimit) {
+		c.JSON(http.StatusTooManyRequests, &dto.ErrorResponse{Message: err.Error()})
+		return
 	}
 
 	logger.Error("internal server error: ", slog.String("error", err.Error()))

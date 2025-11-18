@@ -60,18 +60,22 @@ func main() {
 	}
 
 	userRepo := repository.NewUserRepository(db)
-	userUsecase := usecase.NewUserUsecase(userRepo)
+	userUsecase := usecase.NewUserUsecase(userRepo, logger)
 	userHandler := handlers.NewUserHandler(userUsecase, logger)
 
 	coffeeShopRepo := repository.NewCoffeeShopRepository(db)
-	csUscase := usecase.NewCoffeeShopUsecase(coffeeShopRepo)
+	csUscase := usecase.NewCoffeeShopUsecase(coffeeShopRepo, logger)
 	csHandler := handlers.NewCoffeeShopHandler(csUscase, logger)
 
 	authRepo := repository.NewAuthRepository(db)
-	authUsecase := usecase.NewAuthUsecase(authRepo, "1234567890", &cfg.AuthConfig)
+	authUsecase := usecase.NewAuthUsecase(authRepo, "1234567890", &cfg.AuthConfig, logger)
 	authHandler := handlers.NewAuthHandler(authUsecase, logger)
 
-	ar := router.NewRouter(cfg, userHandler, csHandler, authHandler, authUsecase, logger)
+	ideaRepo := repository.NewIdeaRepository(db)
+	ideaUsecase := usecase.NewIdeaUsecase(ideaRepo, logger)
+	ideaHandler := handlers.NewIdeaHandler(ideaUsecase, logger)
+
+	ar := router.NewRouter(cfg, userHandler, csHandler, authHandler, ideaHandler, authUsecase, logger)
 	r := ar.SetupRouter()
 	err = r.Run(":8080")
 	if err != nil {

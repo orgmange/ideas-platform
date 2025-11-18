@@ -1,6 +1,10 @@
 package usecase
 
 import (
+	"errors"
+	"log/slog"
+
+	apperrors "github.com/GeorgiiMalishev/ideas-platform/internal/app_errors"
 	"github.com/GeorgiiMalishev/ideas-platform/internal/dto"
 	"github.com/GeorgiiMalishev/ideas-platform/internal/models"
 	"github.com/GeorgiiMalishev/ideas-platform/internal/repository"
@@ -8,20 +12,39 @@ import (
 )
 
 type UserUsecaseImpl struct {
-	rep repository.UserRep
+	rep    repository.UserRep
+	logger *slog.Logger
 }
 
-func NewUserUsecase(rep repository.UserRep) UserUsecase {
-	return &UserUsecaseImpl{rep: rep}
+func NewUserUsecase(rep repository.UserRep, logger *slog.Logger) UserUsecase {
+	return &UserUsecaseImpl{rep: rep, logger: logger}
 }
 
 // DeleteUser implements IUserUsecase.
 func (u *UserUsecaseImpl) DeleteUser(ID uuid.UUID) error {
-	return u.rep.DeleteUser(ID)
+	logger := u.logger.With("method", "DeleteUser", "userID", ID.String())
+	logger.Debug("starting delete user")
+
+	err := u.rep.DeleteUser(ID)
+	if err != nil {
+		var errNotFound *apperrors.ErrNotFound
+		if errors.As(err, &errNotFound) {
+			logger.Info("user to delete not found")
+			return err
+		}
+		logger.Error("failed to delete user", "error", err.Error())
+		return err
+	}
+
+	logger.Info("user deleted successfully")
+	return nil
 }
 
 // GetAllUsers implements IUserUsecase.
 func (u *UserUsecaseImpl) GetAllUsers(page int, limit int) ([]dto.UserResponse, error) {
+	logger := u.logger.With("method", "GetAllUsers", "page", page, "limit", limit)
+	logger.Debug("starting get all users")
+
 	if limit <= 0 || limit > 25 {
 		limit = 25
 	}
@@ -30,25 +53,47 @@ func (u *UserUsecaseImpl) GetAllUsers(page int, limit int) ([]dto.UserResponse, 
 	}
 	users, err := u.rep.GetAllUsers(limit, limit*page)
 	if err != nil {
+		logger.Error("failed to get all users", "error", err.Error())
 		return nil, err
 	}
+
+	logger.Info("users fetched successfully", "count", len(users))
 	return toResponses(users), nil
 }
 
 // GetUser implements IUserUsecase.
 func (u *UserUsecaseImpl) GetUser(ID uuid.UUID) (*dto.UserResponse, error) {
+	logger := u.logger.With("method", "GetUser", "userID", ID.String())
+	logger.Debug("starting get user")
+
 	user, err := u.rep.GetUser(ID)
 	if err != nil {
+		var errNotFound *apperrors.ErrNotFound
+		if errors.As(err, &errNotFound) {
+			logger.Info("user not found")
+			return nil, err
+		}
+		logger.Error("failed to get user", "error", err.Error())
 		return nil, err
 	}
 
+	logger.Info("user fetched successfully")
 	return toResponse(user), nil
 }
 
 // UpdateUser implements IUserUsecase.
 func (u *UserUsecaseImpl) UpdateUser(ID uuid.UUID, req *dto.UpdateUserRequest) error {
+	logger := u.logger.With("method", "UpdateUser", "userID", ID.String())
+	logger.Debug("starting update user")
+
 	user, err := u.rep.GetUser(ID)
 	if err != nil {
+		var errNotFound *apperrors.ErrNotFound
+		if errors.As(err, &errNotFound) {
+			logger.Info("user to update not found")
+			return err
+		}
+		logger.Error("failed to get user for update", "error", err.Error())
 		return err
 	}
 
@@ -56,14 +101,14 @@ func (u *UserUsecaseImpl) UpdateUser(ID uuid.UUID, req *dto.UpdateUserRequest) e
 		user.Name = req.Name
 	}
 
-	return u.rep.UpdateUser(user)
-}
-
-func toUser(req *dto.CreateUserRequest) *models.User {
-	return &models.User{
-		Name:  req.Name,
-		Phone: req.Phone,
+	err = u.rep.UpdateUser(user)
+	if err != nil {
+		logger.Error("failed to update user", "error", err.Error())
+		return err
 	}
+
+	logger.Info("user updated successfully")
+	return nil
 }
 
 func toResponse(user *models.User) *dto.UserResponse {

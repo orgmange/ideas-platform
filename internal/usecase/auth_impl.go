@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math/big"
 	"time"
 
@@ -24,57 +25,83 @@ type AuthUsecaseImpl struct {
 	rep       repository.AuthRepository
 	jwtSecret string
 	authCfg   *config.AuthConfig
+	logger    *slog.Logger
 }
 
-func NewAuthUsecase(rep repository.AuthRepository, jwtSecret string, authCfg *config.AuthConfig) AuthUsecase {
+func NewAuthUsecase(rep repository.AuthRepository, jwtSecret string, authCfg *config.AuthConfig, logger *slog.Logger) AuthUsecase {
 	return &AuthUsecaseImpl{
 		rep:       rep,
 		jwtSecret: jwtSecret,
 		authCfg:   authCfg,
+		logger:    logger,
 	}
 }
 
 // GetOTP implements AuthUsecase.
 func (a *AuthUsecaseImpl) GetOTP(phone string) error {
+	logger := a.logger.With(
+		"method", "GetOTP",
+		"phone", phone,
+	)
+
+	logger.Debug("starting OTP generation")
+
 	savedOTP, err := a.rep.GetOTP(phone)
 	var errNotFound *apperrors.ErrNotFound
 	if err != nil && !errors.As(err, &errNotFound) {
+		logger.Error("failed to get OTP from repository", "error", err.Error())
 		return err
 	}
+
 	if savedOTP != nil {
+		logger.Info("existing OTP found",
+			"otp_id", savedOTP.ID,
+			"resend_count", savedOTP.ResendCount)
+
 		err = a.checkRateLimit(savedOTP)
 		if err != nil {
+			logger.Info("rate limit exceeded", "error", err.Error())
 			return err
 		}
 
 		a.updateResendCount(savedOTP)
+		logger.Debug("resend count updated", "new_resend_count", savedOTP.ResendCount)
 	}
+
 	code, err := generateCode()
 	if err != nil {
+		logger.Error("failed to generate OTP code", "error", err.Error())
 		return err
 	}
 
 	hashedCode, err := hashCode(code)
 	if err != nil {
+		logger.Error("failed to hash OTP code", "error", err.Error())
 		return err
 	}
 
 	err = a.saveOTP(savedOTP, hashedCode, phone)
 	if err != nil {
-		return err
-	}
-	err = sendOTPToPhone(phone, code)
-	if err != nil {
+		logger.Error("failed to save OTP", "error", err.Error())
 		return err
 	}
 
+	logger.Info("sending OTP to phone")
+
+	err = sendOTPToPhone(phone, code)
+	if err != nil {
+		logger.Error("failed to send OTP", "error", err.Error())
+		return err
+	}
+
+	logger.Info("OTP sent successfully")
 	return nil
 }
 
 func (*AuthUsecaseImpl) checkRateLimit(savedOTP *models.OTP) error {
 	untilNextCode := time.Until(savedOTP.NextAllowedAt).Seconds()
 	if untilNextCode > 0 {
-		return apperrors.NewAuthErr(
+		return apperrors.NewErrRateLimit(
 			fmt.Sprintf("wait %d seconds before requesting new code",
 				int(untilNextCode)))
 	}
@@ -117,16 +144,31 @@ func (a *AuthUsecaseImpl) updateResendCount(savedOTP *models.OTP) {
 
 // VerifyOTP implements AuthUsecase.
 func (a *AuthUsecaseImpl) VerifyOTP(req *dto.VerifyOTPRequest) (*dto.AuthResponse, error) {
+	logger := a.logger.With(
+		"method", "GetOTP",
+		"phone", req.Phone,
+	)
+
+	logger.Debug("Starting virify OTP")
+
 	savedOTP, err := a.rep.GetOTP(req.Phone)
 	if err != nil {
+		var errNotFound *apperrors.ErrNotFound
+		if errors.As(err, &errNotFound) {
+			logger.Info("Saved OTP not found for this phone")
+		} else {
+			logger.Error("failed to get OTP from repository: ", "error", err.Error())
+		}
 		return nil, err
 	}
 	if savedOTP.AttemptsLeft <= 0 {
+		logger.Info("no attempts left to virify OTP")
 		return nil, apperrors.NewAuthErr("too much attempts")
 	}
 	savedOTP.AttemptsLeft--
 	err = bcrypt.CompareHashAndPassword([]byte(savedOTP.CodeHash), []byte(req.OTP))
 	if err != nil {
+		logger.Info("sended OTP code not match with saved")
 		a.rep.UpdateOTP(savedOTP)
 		return nil, apperrors.NewAuthErr("invalid credentials")
 	}
@@ -135,18 +177,22 @@ func (a *AuthUsecaseImpl) VerifyOTP(req *dto.VerifyOTPRequest) (*dto.AuthRespons
 	if err != nil {
 		var errNotFound *apperrors.ErrNotFound
 		if errors.As(err, &errNotFound) {
+			logger.Info("user with this phone not found, creating")
 			id, err = a.createUser(req)
 			if err != nil {
 				return nil, err
 			}
 		} else {
+			logger.Error("failed to get user id by phone", "error", err.Error())
 			return nil, err
 		}
 	}
 	err = a.rep.DeleteOTP(req.Phone)
 	if err != nil {
+		logger.Error("failed to delete OTP", "error", err.Error())
 		return nil, err
 	}
+
 	return a.makeAuthResponse(*id, "")
 }
 
@@ -176,10 +222,18 @@ func hashCode(code string) (string, error) {
 }
 
 func (a *AuthUsecaseImpl) createUser(req *dto.VerifyOTPRequest) (*uuid.UUID, error) {
+	logger := a.logger.With(
+		"method", "createUser",
+		"phone", req.Phone,
+	)
+
+	logger.Debug("starting create generation")
 	if req.Name == "" {
+		logger.Info("name not valid")
 		return nil, apperrors.NewErrNotValid("name can't be empty")
 	}
 	if req.Phone == "" {
+		logger.Info("phone not valid")
 		return nil, apperrors.NewErrNotValid("phone can't be empty")
 	}
 
@@ -189,9 +243,11 @@ func (a *AuthUsecaseImpl) createUser(req *dto.VerifyOTPRequest) (*uuid.UUID, err
 	}
 	id, err := a.rep.CreateUser(user)
 	if err != nil {
+		logger.Error("failed create user", "error", err.Error())
 		return nil, err
 	}
 
+	logger.Info("user created successfully")
 	return id, nil
 }
 
@@ -214,7 +270,8 @@ func (a *AuthUsecaseImpl) createOTP(phone, hashedCode string) error {
 
 // Logout implements AuthUsecase.
 func (a *AuthUsecaseImpl) Logout(tokenString string) error {
-	return a.rep.DeleteRefreshToken(tokenString)
+	hashedToken := hashToken(tokenString)
+	return a.rep.DeleteRefreshToken(hashedToken)
 }
 
 func (a *AuthUsecaseImpl) LogoutEverywhere(userID uuid.UUID) error {
@@ -231,13 +288,18 @@ func (a *AuthUsecaseImpl) Refresh(oldTokenString string) (*dto.AuthResponse, err
 }
 
 func (a *AuthUsecaseImpl) makeAuthResponse(userID uuid.UUID, oldToken string) (*dto.AuthResponse, error) {
+	logger := a.logger.With("method", "makeAuthResponse", "userID", userID.String())
+
+	logger.Debug("starting make auth response")
 	jwtToken, err := a.createJWTToken(userID)
 	if err != nil {
+		logger.Error("failed to create JWT token", "error", err.Error())
 		return nil, err
 	}
 
 	refreshToken, err := a.createRefreshToken(userID, oldToken)
 	if err != nil {
+		logger.Error("failed to create refresh token token", "error", err.Error())
 		return nil, err
 	}
 
@@ -248,16 +310,24 @@ func (a *AuthUsecaseImpl) makeAuthResponse(userID uuid.UUID, oldToken string) (*
 }
 
 func (a *AuthUsecaseImpl) createRefreshToken(userID uuid.UUID, oldTokenString string) (*string, error) {
+	logger := a.logger.With(
+		"method", "createRefreshToken",
+		"userID", userID.String(),
+	)
+
+	logger.Debug("starting create refresh token")
 	if oldTokenString != "" {
 		var errNotFound *apperrors.ErrNotFound
 		err := a.rep.DeleteRefreshToken(oldTokenString)
 		if err != nil && !errors.As(err, &errNotFound) {
+			logger.Error("failed to delete old token", "error", err.Error())
 			return nil, err
 		}
 	}
 
 	newTokenString, err := generateRefreshToken()
 	if err != nil {
+		logger.Error("failed to generate refresh token", "error", err.Error())
 		return nil, err
 	}
 	hashedToken := hashToken(newTokenString)
@@ -267,6 +337,7 @@ func (a *AuthUsecaseImpl) createRefreshToken(userID uuid.UUID, oldTokenString st
 		ExpiresAt:    time.Now().Add(a.authCfg.JWTConfig.RefreshTokenTimer),
 	})
 	if err != nil {
+		logger.Error("failed to create refresh token", "error", err.Error())
 		return nil, err
 	}
 
@@ -274,33 +345,50 @@ func (a *AuthUsecaseImpl) createRefreshToken(userID uuid.UUID, oldTokenString st
 }
 
 func (a *AuthUsecaseImpl) ValidateJWTToken(tokenString string) (*dto.JWTClaims, error) {
+	logger := a.logger.With(
+		"method", "ValidateJWTToken",
+	)
+
+	logger.Debug("starting validate JWT token")
 	var claims dto.JWTClaims
 	token, err := jwt.ParseWithClaims(tokenString, &claims, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			logger.Info(fmt.Sprintf("unexpexted singing method: %v", token.Header["alg"]))
 			return nil, apperrors.NewAuthErr(fmt.Sprintf("unexpexted singing method: %v", token.Header["alg"]))
 		}
 
 		return []byte(a.jwtSecret), nil
 	})
-	if err != nil {
-		return nil, err
+	if err != nil || !token.Valid {
+		logger.Info("invalid token")
+		return nil, apperrors.NewAuthErr("invalid token")
 	}
-
-	if claims, ok := token.Claims.(*dto.JWTClaims); ok && token.Valid {
-		return claims, nil
-	}
-
-	return nil, apperrors.NewAuthErr("invalid token")
+	logger.Info("JWT claims successfully getted", "userID", claims.UserID.String())
+	return &claims, nil
 }
 
 func (a *AuthUsecaseImpl) validateAndGetRefreshToken(token string) (*models.UserRefreshToken, error) {
+	logger := a.logger.With(
+		"method", "validateAndGetRefreshToken",
+		"token", token,
+	)
+
+	logger.Debug("starting validate and refresh token")
 	hashedToken := hashToken(token)
 	savedToken, err := a.rep.GetRefreshToken(hashedToken)
 	if err != nil {
+		var errNotFound *apperrors.ErrNotFound
+		if errors.As(err, &errNotFound) {
+			logger.Info("refresh token not found")
+			return nil, apperrors.NewAuthErr("refresh token not found")
+		}
+
+		logger.Error("failed to get refresh token", "error", err.Error())
 		return nil, err
 	}
 
 	if !savedToken.ExpiresAt.After(time.Now()) {
+		logger.Info("token expired")
 		return nil, apperrors.NewAuthErr("token expired")
 	}
 	return savedToken, nil

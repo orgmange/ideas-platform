@@ -35,24 +35,24 @@ type AppConfig struct {
 }
 
 type AuthConfig struct {
-	OTPConfig OTPConfig
-	JWTConfig JWTConfig
+	OTPConfig OTPConfig `envPrefix:"AUTH_OTPCONFIG_"`
+	JWTConfig JWTConfig `envPrefix:"AUTH_JWTCONFIG_"`
 }
 
 type OTPConfig struct {
-	ExpiresAtTimer        time.Duration
-	AttemptsLeft          int
-	ResetResendCountTimer time.Duration
-	SoftAttemptsCount     int
-	HardAttemptsCount     int
-	SubSoftAttemptsTimer  time.Duration
-	SubHardAttemptsTimer  time.Duration
-	PostHardAttemptsCount time.Duration
+	ExpiresAtTimer        time.Duration `env:"EXPIRESATTIMER"`
+	AttemptsLeft          int           `env:"ATTEMPTSLEFT"`
+	ResetResendCountTimer time.Duration `env:"RESETRESENDCOUNTTIMER"`
+	SoftAttemptsCount     int           `env:"SOFTATTEMPTSCOUNT"`
+	HardAttemptsCount     int           `env:"HARDATTEMPTSCOUNT"`
+	SubSoftAttemptsTimer  time.Duration `env:"SUBSOFTATTEMPTSTIMER"`
+	SubHardAttemptsTimer  time.Duration `env:"SUBHARDATTEMPTSTIMER"`
+	PostHardAttemptsCount time.Duration `env:"POSTHARDATTEMPTSCOUNT"`
 }
 
 type JWTConfig struct {
-	RefreshTokenTimer time.Duration
-	JWTTokenTimer     time.Duration
+	RefreshTokenTimer time.Duration `env:"REFRESHTOKENTIMER"`
+	JWTTokenTimer     time.Duration `env:"JWTTOKENTIMER"`
 }
 
 func Load() (*Config, error) {

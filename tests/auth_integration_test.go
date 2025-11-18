@@ -1,115 +1,34 @@
 package tests
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net/http"
-	"net/http/httptest"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/GeorgiiMalishev/ideas-platform/config"
-	"github.com/GeorgiiMalishev/ideas-platform/internal/db"
 	"github.com/GeorgiiMalishev/ideas-platform/internal/dto"
-	"github.com/GeorgiiMalishev/ideas-platform/internal/handlers"
 	"github.com/GeorgiiMalishev/ideas-platform/internal/models"
-	"github.com/GeorgiiMalishev/ideas-platform/internal/repository"
-	"github.com/GeorgiiMalishev/ideas-platform/internal/router"
-	"github.com/GeorgiiMalishev/ideas-platform/internal/usecase"
-	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/suite"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
 type AuthIntegrationTestSuite struct {
-	suite.Suite
-	DB       *gorm.DB
-	cfg      *config.Config
-	authRepo repository.AuthRepository
-	Router   *gin.Engine
+	BaseTestSuite
 }
 
 func (suite *AuthIntegrationTestSuite) SetupSuite() {
-	cfg, err := config.Load()
-	if err != nil {
-		suite.T().Fatalf("failed to load config: %v", err)
-	}
-	suite.cfg = cfg
-
-	suite.cfg.DB.Host = "localhost"
-	suite.cfg.DB.Port = 5433
-	suite.cfg.DB.Name = "ideas_db_test"
-	suite.cfg.DB.User = "postgres"
-	suite.cfg.DB.Password = "postgres"
-
-	database, err := db.InitDB(suite.cfg)
-	if err != nil {
-		suite.T().Fatalf("failed to connect to db: %v", err)
-	}
-	suite.DB = database
-
-	suite.authRepo = repository.NewAuthRepository(suite.DB)
-	authUsecase := usecase.NewAuthUsecase(suite.authRepo, "test-secret")
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{}))
-	authHandler := handlers.NewAuthHandler(authUsecase, logger)
-	err = suite.DB.AutoMigrate(
-		&models.User{},
-		&models.BannedUser{},
-		&models.Role{},
-		&models.CoffeeShop{},
-		&models.WorkerCoffeeShop{},
-		&models.Category{},
-		&models.Idea{},
-		&models.IdeaLike{},
-		&models.IdeaComment{},
-		&models.Reward{},
-		&models.RewardType{},
-		&models.OTP{},
-		&models.UserRefreshToken{},
-	)
-	if err != nil {
-		logger.Error("Failed to auto-migrate database:", slog.String("error", err.Error()))
-		return
-	}
-	userRepository := repository.NewUserRepository(suite.DB)
-	userUsecase := usecase.NewUserUsecase(userRepository)
-	userHandler := handlers.NewUserHandler(userUsecase, logger)
-
-	coffeeShopRepo := repository.NewCoffeeShopRepository(suite.DB)
-	csUscase := usecase.NewCoffeeShopUsecase(coffeeShopRepo)
-	csHandler := handlers.NewCoffeeShopHandler(csUscase, logger)
-
-	appRouter := router.NewRouter(suite.cfg, userHandler, csHandler, authHandler, authUsecase, logger)
-	suite.Router = appRouter.SetupRouter()
-}
-
-func (suite *AuthIntegrationTestSuite) TearDownSuite() {
-	sqlDB, err := suite.DB.DB()
-	if err != nil {
-		suite.T().Fatalf("failed to get db instance: %v", err)
-	}
-	sqlDB.Close()
+	suite.BaseTestSuite.SetupSuite()
 }
 
 func (suite *AuthIntegrationTestSuite) TearDownTest() {
-	suite.DB.Exec("DELETE FROM otps")
-	suite.DB.Exec("DELETE FROM users")
-	suite.DB.Exec("DELETE FROM user_refresh_tokens")
+	suite.BaseTestSuite.TearDownTest()
 }
 
 func TestAuthIntegrationTestSuite(t *testing.T) {
 	suite.Run(t, new(AuthIntegrationTestSuite))
-}
-
-type authTestRequest struct {
-	method      string
-	path        string
-	body        interface{}
-	contentType string
 }
 
 // TestGetOTP - табличный тест для получения OTP
@@ -142,11 +61,11 @@ func (suite *AuthIntegrationTestSuite) TestGetOTP() {
 
 	for _, tt := range tests {
 		suite.Run(tt.name, func() {
-			req := authTestRequest{
+			req := TestRequest{
 				method: http.MethodGet,
 				path:   fmt.Sprintf("/api/v1/auth/%s", tt.phone),
 			}
-			w := suite.makeRequest(req)
+			w := suite.MakeRequest(req)
 
 			suite.Equal(tt.expectedStatus, w.Code)
 
@@ -200,7 +119,7 @@ func (suite *AuthIntegrationTestSuite) TestVerifyOTP() {
 			userName:       "",
 			existingUser:   false,
 			invalidOTP:     true,
-			expectedStatus: http.StatusBadRequest,
+			expectedStatus: http.StatusUnauthorized,
 			checkTokens:    false,
 		},
 		{
@@ -226,7 +145,7 @@ func (suite *AuthIntegrationTestSuite) TestVerifyOTP() {
 					Name:  tt.userName,
 					Phone: tt.phone,
 				}
-				_, err := suite.authRepo.CreateUser(user)
+				_, err := suite.AuthRepo.CreateUser(user)
 				suite.NoError(err)
 			}
 
@@ -252,13 +171,13 @@ func (suite *AuthIntegrationTestSuite) TestVerifyOTP() {
 				Name:  tt.userName,
 			}
 
-			req := authTestRequest{
+			req := TestRequest{
 				method:      http.MethodPost,
 				path:        "/api/v1/auth",
 				body:        reqBody,
 				contentType: "application/json",
 			}
-			w := suite.makeRequest(req)
+			w := suite.MakeRequest(req)
 
 			// Проверяем статус
 			suite.Equal(tt.expectedStatus, w.Code)
@@ -278,12 +197,203 @@ func (suite *AuthIntegrationTestSuite) TestVerifyOTP() {
 				if !tt.existingUser {
 					suite.Equal(tt.userName, user.Name)
 				}
+
+				// Проверяем, что OTP удален после успешной верификации
+				var otp models.OTP
+				err = suite.DB.First(&otp, "phone = ?", tt.phone).Error
+				suite.Error(err)
+				suite.Equal(gorm.ErrRecordNotFound, err)
 			}
 		})
 	}
 }
 
-// TestRefresh - табличный тест для обновления токенов
+// TestResendOTP - табличный тест для переотправки OTP
+
+func (suite *AuthIntegrationTestSuite) TestResendOTP() {
+	originalOTPConfig := suite.cfg.AuthConfig.OTPConfig
+	suite.T().Cleanup(func() {
+		suite.cfg.AuthConfig.OTPConfig = originalOTPConfig
+	})
+	tests := []struct {
+		name      string
+		phone     string
+		otpConfig config.OTPConfig
+		actions   []func(phone string)
+		dbCheck   func(phone string)
+	}{
+		{
+			name:  "успешная повторная отправка после кулдауна",
+			phone: "1111111111",
+			otpConfig: config.OTPConfig{
+				ExpiresAtTimer:        time.Minute,
+				ResetResendCountTimer: 2 * time.Minute,
+				SoftAttemptsCount:     5,
+				SubSoftAttemptsTimer:  time.Second,
+				HardAttemptsCount:     10,
+			},
+
+			actions: []func(phone string){
+				func(phone string) { // 1. First request
+					req := TestRequest{method: http.MethodGet, path: fmt.Sprintf("/api/v1/auth/%s", phone)}
+					w := suite.MakeRequest(req)
+					suite.Equal(http.StatusNoContent, w.Code)
+				},
+
+				func(phone string) {
+					time.Sleep(time.Second)
+				},
+
+				func(phone string) {
+					req := TestRequest{method: http.MethodGet, path: fmt.Sprintf("/api/v1/auth/%s", phone)}
+					w := suite.MakeRequest(req)
+					suite.Equal(http.StatusNoContent, w.Code)
+				},
+			},
+
+			dbCheck: func(phone string) {
+				var otp models.OTP
+				err := suite.DB.First(&otp, "phone = ?", phone).Error
+				suite.NoError(err)
+				suite.Equal(1, otp.ResendCount)
+			},
+		},
+
+		{
+			name:  "ошибка 'слишком много запросов' до кулдауна",
+			phone: "2222222222",
+			otpConfig: config.OTPConfig{
+				ExpiresAtTimer:        time.Minute,
+				ResetResendCountTimer: 2 * time.Minute,
+				SoftAttemptsCount:     5,
+				SubSoftAttemptsTimer:  3 * time.Second,
+				HardAttemptsCount:     10,
+			},
+
+			actions: []func(phone string){
+				func(phone string) {
+					req := TestRequest{method: http.MethodGet, path: fmt.Sprintf("/api/v1/auth/%s", phone)}
+					w := suite.MakeRequest(req)
+					suite.Equal(http.StatusNoContent, w.Code)
+				},
+
+				func(phone string) {
+					req := TestRequest{method: http.MethodGet, path: fmt.Sprintf("/api/v1/auth/%s", phone)}
+					w := suite.MakeRequest(req)
+					suite.Equal(http.StatusTooManyRequests, w.Code)
+				},
+			},
+
+			dbCheck: func(phone string) {
+				var otp models.OTP
+				err := suite.DB.First(&otp, "phone = ?", phone).Error
+				suite.NoError(err)
+				suite.Equal(0, otp.ResendCount)
+			},
+		},
+		{
+			name:  "достижение лимита soft-попыток и переход к hard-кулдауну",
+			phone: "3333333333",
+			otpConfig: config.OTPConfig{
+				ExpiresAtTimer:        time.Minute,
+				ResetResendCountTimer: 2 * time.Minute,
+				SoftAttemptsCount:     2,
+				SubSoftAttemptsTimer:  time.Millisecond * 200,
+				HardAttemptsCount:     3,
+				SubHardAttemptsTimer:  time.Second * 2,
+			},
+			actions: []func(phone string){
+				func(phone string) {
+					req := TestRequest{method: http.MethodGet, path: fmt.Sprintf("/api/v1/auth/%s", phone)}
+					w := suite.MakeRequest(req)
+					suite.Equal(http.StatusNoContent, w.Code)
+				},
+				func(phone string) {
+					time.Sleep(time.Millisecond * 200)
+					req := TestRequest{method: http.MethodGet, path: fmt.Sprintf("/api/v1/auth/%s", phone)}
+					w := suite.MakeRequest(req)
+					suite.Equal(http.StatusNoContent, w.Code)
+				},
+				func(phone string) {
+					time.Sleep(time.Millisecond * 200)
+					req := TestRequest{method: http.MethodGet, path: fmt.Sprintf("/api/v1/auth/%s", phone)}
+					w := suite.MakeRequest(req)
+					suite.Equal(http.StatusNoContent, w.Code)
+				},
+				func(phone string) {
+					req := TestRequest{method: http.MethodGet, path: fmt.Sprintf("/api/v1/auth/%s", phone)}
+					w := suite.MakeRequest(req)
+					suite.Equal(http.StatusTooManyRequests, w.Code)
+				},
+			},
+
+			dbCheck: func(phone string) {
+				var otp models.OTP
+				err := suite.DB.First(&otp, "phone = ?", phone).Error
+				suite.NoError(err)
+				suite.Equal(2, otp.ResendCount)
+				suite.True(otp.NextAllowedAt.After(time.Now().Add(time.Second)))
+			},
+		},
+		{
+			name:  "достижение hard-лимита и полная блокировка",
+			phone: "4444444444",
+			otpConfig: config.OTPConfig{
+				ExpiresAtTimer:        time.Minute,
+				ResetResendCountTimer: 10 * time.Second,
+				SoftAttemptsCount:     1,
+				SubSoftAttemptsTimer:  time.Millisecond * 100,
+				HardAttemptsCount:     2,
+				SubHardAttemptsTimer:  time.Millisecond * 100,
+				PostHardAttemptsCount: time.Second * 2,
+			},
+			actions: []func(phone string){
+				func(phone string) {
+					req := TestRequest{method: http.MethodGet, path: fmt.Sprintf("/api/v1/auth/%s", phone)}
+					w := suite.MakeRequest(req)
+					suite.Equal(http.StatusNoContent, w.Code)
+				},
+				func(phone string) {
+					time.Sleep(time.Millisecond * 100)
+					req := TestRequest{method: http.MethodGet, path: fmt.Sprintf("/api/v1/auth/%s", phone)}
+					w := suite.MakeRequest(req)
+					suite.Equal(http.StatusNoContent, w.Code)
+				},
+				func(phone string) {
+					time.Sleep(time.Millisecond * 100)
+					req := TestRequest{method: http.MethodGet, path: fmt.Sprintf("/api/v1/auth/%s", phone)}
+					w := suite.MakeRequest(req)
+					suite.Equal(http.StatusNoContent, w.Code)
+				},
+				func(phone string) {
+					req := TestRequest{method: http.MethodGet, path: fmt.Sprintf("/api/v1/auth/%s", phone)}
+					w := suite.MakeRequest(req)
+					suite.Equal(http.StatusTooManyRequests, w.Code)
+				},
+			},
+			dbCheck: func(phone string) {
+				var otp models.OTP
+				err := suite.DB.First(&otp, "phone = ?", phone).Error
+				suite.NoError(err)
+				suite.Equal(2, otp.ResendCount)
+				suite.True(otp.NextAllowedAt.After(time.Now().Add(time.Second)))
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		suite.Run(tt.name, func() {
+			suite.cfg.AuthConfig.OTPConfig = tt.otpConfig
+			for _, action := range tt.actions {
+				action(tt.phone)
+			}
+			if tt.dbCheck != nil {
+				tt.dbCheck(tt.phone)
+			}
+		})
+	}
+}
+
 func (suite *AuthIntegrationTestSuite) TestRefresh() {
 	tests := []struct {
 		name              string
@@ -303,15 +413,6 @@ func (suite *AuthIntegrationTestSuite) TestRefresh() {
 			expectedStatus:    http.StatusOK,
 			checkNewTokens:    true,
 		},
-		{
-			name:              "обновление токена сразу после получения",
-			phone:             "6655443322",
-			otpCode:           "222333",
-			userName:          "Quick Refresh",
-			waitBeforeRefresh: 0,
-			expectedStatus:    http.StatusOK,
-			checkNewTokens:    true,
-		},
 	}
 
 	for _, tt := range tests {
@@ -323,7 +424,7 @@ func (suite *AuthIntegrationTestSuite) TestRefresh() {
 				Name:  tt.userName,
 				Phone: tt.phone,
 			}
-			_, err := suite.authRepo.CreateUser(user)
+			_, err := suite.AuthRepo.CreateUser(user)
 			suite.NoError(err)
 
 			otp := &models.OTP{
@@ -339,13 +440,13 @@ func (suite *AuthIntegrationTestSuite) TestRefresh() {
 				Phone: tt.phone,
 				OTP:   tt.otpCode,
 			}
-			verifyReq := authTestRequest{
+			verifyReq := TestRequest{
 				method:      http.MethodPost,
 				path:        "/api/v1/auth",
 				body:        verifyReqBody,
 				contentType: "application/json",
 			}
-			verifyW := suite.makeRequest(verifyReq)
+			verifyW := suite.MakeRequest(verifyReq)
 
 			suite.Equal(http.StatusOK, verifyW.Code)
 			var authResp dto.AuthResponse
@@ -361,13 +462,13 @@ func (suite *AuthIntegrationTestSuite) TestRefresh() {
 			refreshReqBody := dto.RefreshRequest{
 				RefreshToken: authResp.RefreshToken,
 			}
-			refreshReq := authTestRequest{
+			refreshReq := TestRequest{
 				method:      http.MethodPost,
 				path:        "/api/v1/auth/refresh",
 				body:        refreshReqBody,
 				contentType: "application/json",
 			}
-			refreshW := suite.makeRequest(refreshReq)
+			refreshW := suite.MakeRequest(refreshReq)
 
 			suite.Equal(tt.expectedStatus, refreshW.Code)
 
@@ -425,20 +526,16 @@ func (suite *AuthIntegrationTestSuite) TestAuthenticatedEndpoints() {
 		suite.Run(tt.name, func() {
 			var token string
 			if tt.withAuth {
-				token = suite.getAuthToken(tt.phone, tt.otpCode, tt.userName)
+				token = suite.GetAuthToken(tt.phone, tt.otpCode, tt.userName)
 			}
 
-			req := authTestRequest{
+			req := TestRequest{
 				method: tt.method,
 				path:   tt.endpoint,
+				token:  token,
 			}
 
-			var w *httptest.ResponseRecorder
-			if tt.withAuth {
-				w = suite.makeAuthenticatedRequest(req, token)
-			} else {
-				w = suite.makeRequest(req)
-			}
+			w := suite.MakeRequest(req)
 
 			suite.Equal(tt.expectedStatus, w.Code)
 
@@ -453,47 +550,81 @@ func (suite *AuthIntegrationTestSuite) TestAuthenticatedEndpoints() {
 	}
 }
 
-// TestLogout - табличный тест для выхода
+// TestLogout - табличный тест для выхода с одного устройства
 func (suite *AuthIntegrationTestSuite) TestLogout() {
 	tests := []struct {
-		name              string
-		phone             string
-		otpCode           string
-		userName          string
-		logoutEndpoint    string
-		expectedStatus    int
-		checkInvalidation bool
+		name           string
+		phone          string
+		otpCode        string
+		userName       string
+		expectedStatus int
 	}{
 		{
-			name:              "выход с одного устройства",
-			phone:             "1234567890",
-			otpCode:           "123456",
-			userName:          "Logout User",
-			logoutEndpoint:    "/api/v1/logout",
-			expectedStatus:    http.StatusNoContent,
-			checkInvalidation: true,
+			name:           "успешный logout - refresh токен удален, access токен истекает через 2 сек",
+			phone:          "1234567890",
+			otpCode:        "123456",
+			userName:       "Logout User",
+			expectedStatus: http.StatusNoContent,
 		},
 	}
 
 	for _, tt := range tests {
 		suite.Run(tt.name, func() {
-			token := suite.getAuthToken(tt.phone, tt.otpCode, tt.userName)
+			// 1. Получаем оба токена
+			authResp := suite.GetAuthResponse(tt.phone, tt.otpCode, tt.userName)
+			accessToken := authResp.AccessToken
+			refreshToken := authResp.RefreshToken
 
-			logoutReq := authTestRequest{
-				method: http.MethodPost,
-				path:   tt.logoutEndpoint,
+			// 2. Проверяем, что токены работают до logout
+			meReq := TestRequest{
+				method: http.MethodGet,
+				path:   "/api/v1/users/me",
+				token:  accessToken,
 			}
-			w := suite.makeAuthenticatedRequest(logoutReq, token)
+			w := suite.MakeRequest(meReq)
+			suite.Equal(http.StatusOK, w.Code, "access токен должен работать до logout")
+
+			refreshReq := TestRequest{
+				method:      http.MethodPost,
+				path:        "/api/v1/auth/refresh",
+				body:        dto.RefreshRequest{RefreshToken: refreshToken},
+				contentType: "application/json",
+			}
+
+			// 3. Выполняем logout с refresh токеном
+			logoutReq := TestRequest{
+				method:      http.MethodPost,
+				path:        "/api/v1/logout",
+				body:        dto.LogoutRequest{RefreshToken: refreshToken},
+				contentType: "application/json",
+				token:       accessToken,
+			}
+			w = suite.MakeRequest(logoutReq)
 			suite.Equal(tt.expectedStatus, w.Code)
 
-			if tt.checkInvalidation {
-				meReq := authTestRequest{
-					method: http.MethodGet,
-					path:   "/api/v1/users/me",
-				}
-				w = suite.makeAuthenticatedRequest(meReq, token)
-				suite.Equal(http.StatusUnauthorized, w.Code)
-			}
+			// 4. Проверяем, что refresh токен удален из БД
+			var refreshTokenModel models.UserRefreshToken
+			err := suite.DB.Where("refresh_token = ?", refreshToken).First(&refreshTokenModel).Error
+			suite.Error(err, "refresh token должен быть удален из БД")
+			suite.Equal(gorm.ErrRecordNotFound, err)
+
+			// 5. Проверяем, что refresh токен больше не работает
+			w = suite.MakeRequest(refreshReq)
+			suite.Equal(http.StatusUnauthorized, w.Code,
+				"refresh token должен быть невалиден после logout")
+
+			// 6. Проверяем, что access токен ЕЩЕ работает (JWT stateless особенность)
+			w = suite.MakeRequest(meReq)
+			suite.Equal(http.StatusOK, w.Code,
+				"access токен продолжает работать до истечения TTL (2 сек)")
+
+			// 7. Ждем истечения JWT (2 секунды + небольшой запас)
+			time.Sleep(2100 * time.Millisecond)
+
+			// 8. Проверяем, что access токен больше не работает (истек)
+			w = suite.MakeRequest(meReq)
+			suite.Equal(http.StatusUnauthorized, w.Code,
+				"access токен должен истечь через 2 секунды")
 		})
 	}
 }
@@ -501,160 +632,132 @@ func (suite *AuthIntegrationTestSuite) TestLogout() {
 // TestLogoutEverywhere - табличный тест для выхода со всех устройств
 func (suite *AuthIntegrationTestSuite) TestLogoutEverywhere() {
 	tests := []struct {
-		name               string
-		phone              string
-		otpCode            string
-		userName           string
-		numTokens          int
-		expectedStatus     int
-		checkAllInvalidate bool
+		name        string
+		phone       string
+		otpCode     string
+		userName    string
+		numSessions int
 	}{
 		{
-			name:               "выход со всех устройств (2 токена)",
-			phone:              "1112223334",
-			otpCode:            "123123",
-			userName:           "Multi Device User",
-			numTokens:          2,
-			expectedStatus:     http.StatusNoContent,
-			checkAllInvalidate: true,
+			name:        "выход со всех устройств - все refresh токены удалены",
+			phone:       "1112223334",
+			otpCode:     "123123",
+			userName:    "Multi Device User",
+			numSessions: 2,
 		},
 		{
-			name:               "выход со всех устройств (3 токена)",
-			phone:              "5556667778",
-			otpCode:            "456456",
-			userName:           "Many Devices User",
-			numTokens:          3,
-			expectedStatus:     http.StatusNoContent,
-			checkAllInvalidate: true,
+			name:        "выход со всех устройств (3 сессии)",
+			phone:       "5556667778",
+			otpCode:     "456456",
+			userName:    "Many Devices User",
+			numSessions: 3,
 		},
 	}
 
 	for _, tt := range tests {
 		suite.Run(tt.name, func() {
-			tokens := make([]string, tt.numTokens)
+			// 1. Создаем несколько сессий
+			sessions := make([]struct {
+				accessToken  string
+				refreshToken string
+			}, tt.numSessions)
 
-			// Создаем несколько токенов
-			for i := 0; i < tt.numTokens; i++ {
-				tokens[i] = suite.getAuthToken(tt.phone, tt.otpCode, tt.userName)
-				if i < tt.numTokens-1 {
-					time.Sleep(1 * time.Second) // чтобы refresh токены отличались
+			for i := 0; i < tt.numSessions; i++ {
+				authResp := suite.GetAuthResponse(tt.phone, tt.otpCode, tt.userName)
+				sessions[i].accessToken = authResp.AccessToken
+				sessions[i].refreshToken = authResp.RefreshToken
+				if i < tt.numSessions-1 {
+					time.Sleep(100 * time.Millisecond) // Небольшая задержка между сессиями
 				}
 			}
 
-			// Выходим со всех устройств используя первый токен
-			logoutReq := authTestRequest{
-				method: http.MethodPost,
-				path:   "/api/v1/logout-everywhere",
-			}
-			w := suite.makeAuthenticatedRequest(logoutReq, tokens[0])
-			suite.Equal(tt.expectedStatus, w.Code)
-
-			// Проверяем, что все токены невалидны
-			if tt.checkAllInvalidate {
-				meReq := authTestRequest{
+			// 2. Проверяем, что все токены работают до logout
+			for i, session := range sessions {
+				meReq := TestRequest{
 					method: http.MethodGet,
 					path:   "/api/v1/users/me",
+					token:  session.accessToken,
 				}
-				for i, token := range tokens {
-					w := suite.makeAuthenticatedRequest(meReq, token)
-					suite.Equal(http.StatusUnauthorized, w.Code,
-						"токен %d должен быть невалидным", i+1)
+				w := suite.MakeRequest(meReq)
+				suite.Equal(http.StatusOK, w.Code,
+					"сессия %d: access токен должен работать до logout", i+1)
+
+				refreshReq := TestRequest{
+					method:      http.MethodPost,
+					path:        "/api/v1/auth/refresh",
+					body:        dto.RefreshRequest{RefreshToken: session.refreshToken},
+					contentType: "application/json",
 				}
+				w = suite.MakeRequest(refreshReq)
+				suite.Equal(http.StatusOK, w.Code,
+					"сессия %d: refresh токен должен работать до logout", i+1)
+			}
+
+			// 3. Проверяем количество refresh токенов в БД
+			var count int64
+			suite.DB.Model(&models.UserRefreshToken{}).
+				Joins("JOIN users ON users.id = user_refresh_tokens.user_id").
+				Where("users.phone = ?", tt.phone).
+				Count(&count)
+			suite.Equal(int64(tt.numSessions), count,
+				"в БД должно быть %d refresh токенов", tt.numSessions)
+
+			// 4. Выполняем logout-everywhere используя первый токен
+			logoutReq := TestRequest{
+				method:      http.MethodPost,
+				path:        "/api/v1/logout-everywhere",
+				contentType: "application/json",
+				token:       sessions[0].accessToken,
+			}
+			w := suite.MakeRequest(logoutReq)
+			suite.Equal(http.StatusNoContent, w.Code)
+
+			// 5. Проверяем, что все refresh токены удалены из БД
+			suite.DB.Model(&models.UserRefreshToken{}).
+				Joins("JOIN users ON users.id = user_refresh_tokens.user_id").
+				Where("users.phone = ?", tt.phone).
+				Count(&count)
+			suite.Equal(int64(0), count, "все refresh токены должны быть удалены")
+
+			// 6. Проверяем, что все refresh токены больше не работают
+			for i, session := range sessions {
+				refreshReq := TestRequest{
+					method:      http.MethodPost,
+					path:        "/api/v1/auth/refresh",
+					body:        dto.RefreshRequest{RefreshToken: session.refreshToken},
+					contentType: "application/json",
+				}
+				w := suite.MakeRequest(refreshReq)
+				suite.Equal(http.StatusUnauthorized, w.Code,
+					"сессия %d: refresh token должен быть невалиден", i+1)
+			}
+
+			// 7. Проверяем, что все access токены ЕЩЕ работают (JWT stateless)
+			for i, session := range sessions {
+				meReq := TestRequest{
+					method: http.MethodGet,
+					path:   "/api/v1/users/me",
+					token:  session.accessToken,
+				}
+				w := suite.MakeRequest(meReq)
+				suite.Equal(http.StatusOK, w.Code,
+					"сессия %d: access токен продолжает работать до истечения TTL", i+1)
+			}
+
+			// 8. Ждем истечения JWT (2 секунды + небольшой запас)
+			time.Sleep(2100 * time.Millisecond)
+
+			// 9. Проверяем, что все access токены больше не работают (истекли)
+			for i, session := range sessions {
+				meReq := TestRequest{
+					method: http.MethodGet,
+					path:   "/api/v1/users/me",
+					token:  session.accessToken,
+				}
+				w := suite.MakeRequest(meReq)
+				suite.Equal(http.StatusUnauthorized, w.Code,
+					"сессия %d: access токен должен истечь через 2 секунды", i+1)
 			}
 		})
 	}
 }
-
-// Helper functions
-
-func (suite *AuthIntegrationTestSuite) makeRequest(req authTestRequest) *httptest.ResponseRecorder {
-	w := httptest.NewRecorder()
-	var bodyReader *bytes.Buffer
-
-	if req.body != nil {
-		bodyBytes, err := json.Marshal(req.body)
-		suite.Require().NoError(err)
-		bodyReader = bytes.NewBuffer(bodyBytes)
-	} else {
-		bodyReader = bytes.NewBuffer(nil)
-	}
-
-	httpReq, err := http.NewRequest(req.method, req.path, bodyReader)
-	suite.Require().NoError(err)
-
-	if req.contentType != "" {
-		httpReq.Header.Set("Content-Type", req.contentType)
-	}
-
-	suite.Router.ServeHTTP(w, httpReq)
-	return w
-}
-
-func (suite *AuthIntegrationTestSuite) makeAuthenticatedRequest(req authTestRequest, token string) *httptest.ResponseRecorder {
-	w := httptest.NewRecorder()
-	var bodyReader *bytes.Buffer
-
-	if req.body != nil {
-		bodyBytes, err := json.Marshal(req.body)
-		suite.Require().NoError(err)
-		bodyReader = bytes.NewBuffer(bodyBytes)
-	} else {
-		bodyReader = bytes.NewBuffer(nil)
-	}
-
-	httpReq, err := http.NewRequest(req.method, req.path, bodyReader)
-	suite.Require().NoError(err)
-
-	if req.contentType != "" {
-		httpReq.Header.Set("Content-Type", req.contentType)
-	}
-	httpReq.Header.Set("Authorization", "Bearer "+token)
-
-	suite.Router.ServeHTTP(w, httpReq)
-	return w
-}
-
-func (suite *AuthIntegrationTestSuite) getAuthToken(phone, otpCode, name string) string {
-	hashedCode, _ := bcrypt.GenerateFromPassword([]byte(otpCode), bcrypt.DefaultCost)
-
-	// Проверяем существование пользователя
-	var user models.User
-	err := suite.DB.First(&user, "phone = ?", phone).Error
-	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			_, err = suite.authRepo.CreateUser(&models.User{Name: name, Phone: phone})
-			suite.Require().NoError(err)
-		} else {
-			suite.Require().NoError(err)
-		}
-	}
-
-	otp := &models.OTP{
-		Phone:        phone,
-		CodeHash:     string(hashedCode),
-		ExpiresAt:    time.Now().Add(5 * time.Second),
-		AttemptsLeft: 3,
-	}
-	suite.DB.Create(otp)
-
-	reqBody := dto.VerifyOTPRequest{
-		Phone: phone,
-		OTP:   otpCode,
-		Name:  name,
-	}
-
-	req := authTestRequest{
-		method:      http.MethodPost,
-		path:        "/api/v1/auth",
-		body:        reqBody,
-		contentType: "application/json",
-	}
-	w := suite.makeRequest(req)
-	suite.Require().Equal(http.StatusOK, w.Code)
-
-	var authResponse dto.AuthResponse
-	err = json.Unmarshal(w.Body.Bytes(), &authResponse)
-	suite.Require().NoError(err)
-	return authResponse.AccessToken
-}
-

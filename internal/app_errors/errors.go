@@ -34,9 +34,21 @@ type AuthErr struct {
 }
 
 func NewAuthErr(message string) error {
-	return &ErrNotValid{message: message}
+	return &AuthErr{message: message}
 }
 
 func (err *AuthErr) Error() string {
+	return err.message
+}
+
+type ErrRateLimit struct {
+	message string
+}
+
+func NewErrRateLimit(message string) error {
+	return &ErrRateLimit{message: message}
+}
+
+func (err *ErrRateLimit) Error() string {
 	return err.message
 }

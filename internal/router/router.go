@@ -17,6 +17,7 @@ type AppRouter struct {
 	userHandler       *handlers.UserHandler
 	coffeeShopHandler *handlers.CoffeeShopHandler
 	authHandler       *handlers.AuthHandler
+	ideaHandler       *handlers.IdeaHandler
 
 	authUsecase usecase.AuthUsecase
 	logger      *slog.Logger
@@ -26,6 +27,8 @@ func NewRouter(cfg *config.Config,
 	userHandler *handlers.UserHandler,
 	coffeeShopHandler *handlers.CoffeeShopHandler,
 	authHandler *handlers.AuthHandler,
+	ideaHandler *handlers.IdeaHandler,
+
 	authUsecase usecase.AuthUsecase,
 	logger *slog.Logger,
 ) *AppRouter {
@@ -34,8 +37,10 @@ func NewRouter(cfg *config.Config,
 		userHandler:       userHandler,
 		coffeeShopHandler: coffeeShopHandler,
 		authHandler:       authHandler,
-		authUsecase:       authUsecase,
-		logger:            logger,
+		ideaHandler:       ideaHandler,
+
+		authUsecase: authUsecase,
+		logger:      logger,
 	}
 }
 
