@@ -19,6 +19,7 @@ type AuthResponse struct {
 type JWTClaims struct {
 	jwt.RegisteredClaims
 	UserID       uuid.UUID `json:"user_id"`
+	Role         string    `json:"role"`
 	RefreshToken string    `json:"refresh_token"`
 }
 

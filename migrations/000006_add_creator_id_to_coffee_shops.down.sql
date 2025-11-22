@@ -1,1 +1,0 @@
-ALTER TABLE coffee_shop DROP COLUMN creator_id;

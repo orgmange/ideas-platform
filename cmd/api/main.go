@@ -75,7 +75,7 @@ func main() {
 	ideaUsecase := usecase.NewIdeaUsecase(ideaRepo, logger)
 	ideaHandler := handlers.NewIdeaHandler(ideaUsecase, logger)
 
-	ar := router.NewRouter(cfg, userHandler, csHandler, authHandler, ideaHandler, authUsecase, logger)
+	ar := router.NewRouter(cfg, userHandler, csHandler, authHandler, ideaHandler, nil, authUsecase, logger)
 	r := ar.SetupRouter()
 	err = r.Run(":8080")
 	if err != nil {

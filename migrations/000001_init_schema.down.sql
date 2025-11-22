@@ -1,9 +1,0 @@
-DROP TABLE IF EXISTS user_rewards;
-DROP TABLE IF EXISTS idea_comments;
-DROP TABLE IF EXISTS idea_likes;
-
-DROP TABLE IF EXISTS ideas;
-DROP TABLE IF EXISTS users;
-
-DROP TABLE IF EXISTS rewards;
-DROP TABLE IF EXISTS categories;

@@ -21,10 +21,14 @@ func NewUserUsecase(rep repository.UserRep, logger *slog.Logger) UserUsecase {
 }
 
 // DeleteUser implements IUserUsecase.
-func (u *UserUsecaseImpl) DeleteUser(ID uuid.UUID) error {
-	logger := u.logger.With("method", "DeleteUser", "userID", ID.String())
+func (u *UserUsecaseImpl) DeleteUser(requesterID, ID uuid.UUID) error {
+	logger := u.logger.With("method", "DeleteUser", "requesterID", requesterID.String(), "userID", ID.String())
 	logger.Debug("starting delete user")
 
+	if !isOwner(requesterID, ID) {
+		logger.Info("access denied")
+		return apperrors.NewErrAccessDenied("forbidden")
+	}
 	err := u.rep.DeleteUser(ID)
 	if err != nil {
 		var errNotFound *apperrors.ErrNotFound
@@ -41,9 +45,14 @@ func (u *UserUsecaseImpl) DeleteUser(ID uuid.UUID) error {
 }
 
 // GetAllUsers implements IUserUsecase.
-func (u *UserUsecaseImpl) GetAllUsers(page int, limit int) ([]dto.UserResponse, error) {
+func (u *UserUsecaseImpl) GetAllUsers(role string, page int, limit int) ([]dto.UserResponse, error) {
 	logger := u.logger.With("method", "GetAllUsers", "page", page, "limit", limit)
 	logger.Debug("starting get all users")
+
+	if role != "admin" {
+		logger.Info("access denied")
+		return nil, apperrors.NewErrAccessDenied("forbidden")
+	}
 
 	if limit <= 0 || limit > 25 {
 		limit = 25
@@ -62,9 +71,14 @@ func (u *UserUsecaseImpl) GetAllUsers(page int, limit int) ([]dto.UserResponse, 
 }
 
 // GetUser implements IUserUsecase.
-func (u *UserUsecaseImpl) GetUser(ID uuid.UUID) (*dto.UserResponse, error) {
+func (u *UserUsecaseImpl) GetUser(role string, requesterID, ID uuid.UUID) (*dto.UserResponse, error) {
 	logger := u.logger.With("method", "GetUser", "userID", ID.String())
 	logger.Debug("starting get user")
+
+	if !isOwner(requesterID, ID) && role != "admin" {
+		logger.Info("access denied")
+		return nil, apperrors.NewErrAccessDenied("forbidden")
+	}
 
 	user, err := u.rep.GetUser(ID)
 	if err != nil {
@@ -82,10 +96,14 @@ func (u *UserUsecaseImpl) GetUser(ID uuid.UUID) (*dto.UserResponse, error) {
 }
 
 // UpdateUser implements IUserUsecase.
-func (u *UserUsecaseImpl) UpdateUser(ID uuid.UUID, req *dto.UpdateUserRequest) error {
+func (u *UserUsecaseImpl) UpdateUser(requesterID, ID uuid.UUID, req *dto.UpdateUserRequest) error {
 	logger := u.logger.With("method", "UpdateUser", "userID", ID.String())
 	logger.Debug("starting update user")
 
+	if !isOwner(requesterID, ID) {
+		logger.Info("access denied")
+		return apperrors.NewErrAccessDenied("forbidden")
+	}
 	user, err := u.rep.GetUser(ID)
 	if err != nil {
 		var errNotFound *apperrors.ErrNotFound
@@ -126,4 +144,8 @@ func toResponses(users []models.User) []dto.UserResponse {
 	}
 
 	return res
+}
+
+func isOwner(requesterID, userID uuid.UUID) bool {
+	return requesterID == userID
 }

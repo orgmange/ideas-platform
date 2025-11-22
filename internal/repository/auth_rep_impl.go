@@ -38,24 +38,35 @@ func (r *authRepository) DeleteOTP(phone string) error {
 	return r.db.Where("phone = ?", phone).Delete(&models.OTP{}).Error
 }
 
-func (r *authRepository) GetUserIDByPhone(phone string) (*uuid.UUID, error) {
+func (r *authRepository) GetUserByPhone(phone string) (*models.User, error) {
 	var user models.User
-	err := r.db.Where("phone = ?", phone).First(&user).Error
+	err := r.db.Preload("Role").Where("phone = ?", phone).First(&user).Error
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, apperrors.NewErrNotFound("user", phone)
 		}
 		return nil, err
 	}
-	return &user.ID, nil
+	return &user, nil
 }
 
-func (r *authRepository) CreateUser(user *models.User) (*uuid.UUID, error) {
+func (r *authRepository) CreateUser(user *models.User) (*models.User, error) {
 	err := r.db.Create(user).Error
 	if err != nil {
 		return nil, err
 	}
-	return &user.ID, nil
+	return user, nil
+}
+
+func (r *authRepository) GetRoleByName(name string) (*models.Role, error) {
+	var role models.Role
+	if err := r.db.Where("name = ?", name).First(&role).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, apperrors.NewErrNotFound("role", name)
+		}
+		return nil, err
+	}
+	return &role, nil
 }
 
 // CreateRefreshToken creates a new refresh token.
@@ -66,7 +77,7 @@ func (r *authRepository) CreateRefreshToken(token *models.UserRefreshToken) erro
 // GetRefreshToken retrieves a token by its value.
 func (r *authRepository) GetRefreshToken(token string) (*models.UserRefreshToken, error) {
 	var refreshToken models.UserRefreshToken
-	if err := r.db.First(&refreshToken, "refresh_token = ?", token).Error; err != nil {
+	if err := r.db.Preload("User.Role").First(&refreshToken, "refresh_token = ?", token).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, apperrors.NewErrNotFound("refresh token", token)
 		}

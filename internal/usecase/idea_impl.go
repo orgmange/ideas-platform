@@ -180,7 +180,7 @@ func (u *IdeaUsecaseImpl) getIfCreator(userID, ideaID uuid.UUID) (*models.Idea, 
 
 	if idea.CreatorID == nil || userID != *idea.CreatorID {
 		logger.Info("user is not creator of the idea", "creatorID", idea.CreatorID)
-		return nil, apperrors.NewAuthErr("access denied")
+		return nil, apperrors.NewErrUnauthorized("access denied")
 	}
 
 	logger.Debug("user is confirmed as creator")

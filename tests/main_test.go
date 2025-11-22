@@ -35,6 +35,11 @@ type BaseTestSuite struct {
 	AuthRepo       repository.AuthRepository
 	UserRepo       repository.UserRep
 	CoffeeShopRepo repository.CoffeeShopRep
+	IdeaRepo       repository.IdeaRepository
+	RewardRepo     repository.RewardRepository
+	RewardTypeRepo repository.RewardTypeRepository
+	UserRoleID     uuid.UUID
+	AdminRoleID    uuid.UUID
 }
 
 // TestRequest is a helper struct for making requests
@@ -87,24 +92,46 @@ func (suite *BaseTestSuite) SetupSuite() {
 	suite.AuthRepo = repository.NewAuthRepository(suite.DB)
 	suite.UserRepo = repository.NewUserRepository(suite.DB)
 	suite.CoffeeShopRepo = repository.NewCoffeeShopRepository(suite.DB)
+	suite.IdeaRepo = repository.NewIdeaRepository(suite.DB)
+	suite.RewardRepo = repository.NewRewardRepository(suite.DB)
+	suite.RewardTypeRepo = repository.NewRewardTypeRepository(suite.DB)
 
 	// Usecases
 	authUsecase := usecase.NewAuthUsecase(suite.AuthRepo, "test-secret", &suite.cfg.AuthConfig, logger)
 	userUsecase := usecase.NewUserUsecase(suite.UserRepo, logger)
 	csUscase := usecase.NewCoffeeShopUsecase(suite.CoffeeShopRepo, logger)
+	ideaUsecase := usecase.NewIdeaUsecase(suite.IdeaRepo, logger)
+	rewardUsecase := usecase.NewRewardUsecase(suite.RewardRepo, suite.IdeaRepo, logger)
+	rewardTypeUsecase := usecase.NewRewardTypeUsecase(suite.RewardTypeRepo, suite.CoffeeShopRepo, logger)
 
 	// Handlers
 	authHandler := handlers.NewAuthHandler(authUsecase, logger)
 	userHandler := handlers.NewUserHandler(userUsecase, logger)
 	csHandler := handlers.NewCoffeeShopHandler(csUscase, logger)
+	ideaHandler := handlers.NewIdeaHandler(ideaUsecase, logger)
+	rewardHandler := handlers.NewRewardHandler(rewardUsecase, logger)
+	rewardTypeHandler := handlers.NewRewardTypeHandler(rewardTypeUsecase, logger)
 
 	// Router
-	appRouter := router.NewRouter(suite.cfg, userHandler, csHandler, authHandler, nil, authUsecase, logger)
+	appRouter := router.NewRouter(suite.cfg, userHandler, csHandler, authHandler, ideaHandler, rewardHandler, rewardTypeHandler, authUsecase, logger)
 	suite.Router = appRouter.SetupRouter()
+
+	adminRole := models.Role{
+		Name: "admin",
+	}
+	suite.DB.FirstOrCreate(&adminRole, "name = ?", "admin")
+	suite.AdminRoleID = adminRole.ID
+
+	userRole := models.Role{
+		Name: "user",
+	}
+	suite.DB.FirstOrCreate(&userRole, "name = ?", "user")
+	suite.UserRoleID = userRole.ID
 }
 
 // TearDownSuite tears down the test suite
 func (suite *BaseTestSuite) TearDownSuite() {
+	suite.DB.Exec("DELETE FROM role")
 	sqlDB, err := suite.DB.DB()
 	if err != nil {
 		suite.T().Fatalf("failed to get db instance: %v", err)
@@ -118,7 +145,10 @@ func (suite *BaseTestSuite) TearDownTest() {
 	suite.DB.Exec("DELETE FROM user_refresh_tokens")
 	suite.DB.Exec("DELETE FROM idea_like")
 	suite.DB.Exec("DELETE FROM idea_comment")
+	suite.DB.Exec("DELETE FROM reward")
 	suite.DB.Exec("DELETE FROM idea")
+	suite.DB.Exec("DELETE FROM reward_type")
+	suite.DB.Exec("DELETE FROM category")
 	suite.DB.Exec("DELETE FROM worker_coffee_shop")
 	suite.DB.Exec("DELETE FROM coffee_shop")
 	suite.DB.Exec("DELETE FROM otps")
@@ -160,8 +190,9 @@ func (suite *BaseTestSuite) GetAuthResponse(phone, otpCode, name string) dto.Aut
 	err := suite.DB.First(&user, "phone = ?", phone).Error
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			_, err = suite.AuthRepo.CreateUser(&models.User{Name: name, Phone: phone})
-			suite.Require().NoError(err)
+			createdUser, errCreate := suite.AuthRepo.CreateUser(&models.User{Name: name, Phone: phone, RoleID: suite.UserRoleID})
+			suite.Require().NoError(errCreate)
+			user = *createdUser // Dereference to assign the value
 		}
 	}
 
@@ -206,13 +237,39 @@ func (suite *BaseTestSuite) GetRandomAuthToken() string {
 	return suite.GetAuthToken(phone, "123456", "Test User")
 }
 
+// RegisterUserAndGetToken is a helper to get an auth token for a given user model.
+// It ensures the user is in the DB via the repository and then simulates the OTP
+// verification flow to log in the user and get a valid token.
+func (suite *BaseTestSuite) RegisterUserAndGetToken(user *models.User) string {
+	const otpCode = "123456" // A dummy OTP code for testing purposes.
+
+	// Ensure the user exists in the database.
+	var existingUser models.User
+	err := suite.DB.First(&existingUser, "phone = ?", user.Phone).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			// If user doesn't exist by phone, create them from the provided model using the repository.
+			_, errCreate := suite.AuthRepo.CreateUser(user)
+			suite.Require().NoError(errCreate)
+		} else {
+			// For any other DB error, fail the test.
+			suite.Require().NoError(err)
+		}
+	}
+
+	// Use the existing GetAuthToken helper to complete the login flow.
+	return suite.GetAuthToken(user.Phone, otpCode, user.Name)
+}
+
 // CreateUser is a helper to create a user
-func (suite *BaseTestSuite) CreateUser(name, phone string) (*models.User, error) {
+func (suite *BaseTestSuite) CreateUser(name, phone string) *models.User {
 	user := &models.User{
-		ID:    uuid.New(),
-		Name:  name,
-		Phone: phone,
+		ID:     uuid.New(),
+		Name:   name,
+		Phone:  phone,
+		RoleID: suite.UserRoleID,
 	}
 	err := suite.DB.Create(user).Error
-	return user, err
+	suite.Require().NoError(err)
+	return user
 }

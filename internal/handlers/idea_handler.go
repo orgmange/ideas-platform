@@ -40,7 +40,7 @@ func (h *IdeaHandler) CreateIdea(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	userID, ok := parseUserIDFromContext(c)
+	userID, ok := parseUserIDFromContext(h.logger, c)
 	if !ok {
 		return
 	}
@@ -105,7 +105,7 @@ func (h *IdeaHandler) GetIdeasFromShop(c *gin.Context) {
 // @Router /users/me/ideas [get]
 // @Security ApiKeyAuth
 func (h *IdeaHandler) GetIdeasFromUser(c *gin.Context) {
-	userID, ok := parseUserIDFromContext(c)
+	userID, ok := parseUserIDFromContext(h.logger, c)
 	if !ok {
 		return
 	}
@@ -172,7 +172,7 @@ func (h *IdeaHandler) UpdateIdea(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "bad request"})
 		return
 	}
-	userID, ok := parseUserIDFromContext(c)
+	userID, ok := parseUserIDFromContext(h.logger, c)
 	if !ok {
 		return
 	}
@@ -201,7 +201,7 @@ func (h *IdeaHandler) DeleteIdea(c *gin.Context) {
 	if !ok {
 		return
 	}
-	userID, ok := parseUserIDFromContext(c)
+	userID, ok := parseUserIDFromContext(h.logger, c)
 	if !ok {
 		return
 	}

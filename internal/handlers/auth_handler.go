@@ -136,7 +136,7 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 // @Router /logout-everywhere [post]
 // @Security ApiKeyAuth
 func (h *AuthHandler) LogoutEverywhere(c *gin.Context) {
-	userID, ok := parseUserIDFromContext(c)
+	userID, ok := parseUserIDFromContext(h.logger, c)
 	if !ok {
 		return
 	}

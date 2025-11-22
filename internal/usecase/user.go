@@ -6,8 +6,8 @@ import (
 )
 
 type UserUsecase interface {
-	UpdateUser(ID uuid.UUID, req *dto.UpdateUserRequest) error
-	GetAllUsers(page, limit int) ([]dto.UserResponse, error)
-	GetUser(ID uuid.UUID) (*dto.UserResponse, error)
-	DeleteUser(ID uuid.UUID) error
+	UpdateUser(requesterID, ID uuid.UUID, req *dto.UpdateUserRequest) error
+	GetAllUsers(role string, page, limit int) ([]dto.UserResponse, error)
+	GetUser(role string, requesterID, ID uuid.UUID) (*dto.UserResponse, error)
+	DeleteUser(requesterID, ID uuid.UUID) error
 }

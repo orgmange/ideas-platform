@@ -10,8 +10,9 @@ type AuthRepository interface {
 	CreateOTP(otp *models.OTP) error
 	UpdateOTP(otp *models.OTP) error
 	DeleteOTP(phone string) error
-	GetUserIDByPhone(phone string) (*uuid.UUID, error)
-	CreateUser(*models.User) (*uuid.UUID, error)
+	GetUserByPhone(phone string) (*models.User, error)
+	CreateUser(*models.User) (*models.User, error)
+	GetRoleByName(name string) (*models.Role, error)
 
 	// Refresh Token
 	CreateRefreshToken(token *models.UserRefreshToken) error

@@ -37,7 +37,7 @@ func (h *CoffeeShopHandler) CreateCoffeeShop(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	userID, ok := parseUserIDFromContext(c)
+	userID, ok := parseUserIDFromContext(h.logger, c)
 	if !ok {
 		return
 	}
@@ -122,7 +122,7 @@ func (h *CoffeeShopHandler) UpdateCoffeeShop(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "bad request"})
 		return
 	}
-	userID, ok := parseUserIDFromContext(c)
+	userID, ok := parseUserIDFromContext(h.logger, c)
 	if !ok {
 		return
 	}
@@ -151,7 +151,7 @@ func (h *CoffeeShopHandler) DeleteCoffeeShop(c *gin.Context) {
 	if !ok {
 		return
 	}
-	userID, ok := parseUserIDFromContext(c)
+	userID, ok := parseUserIDFromContext(h.logger, c)
 	if !ok {
 		return
 	}

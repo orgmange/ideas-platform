@@ -29,15 +29,27 @@ func (err *ErrNotValid) Error() string {
 	return err.message
 }
 
-type AuthErr struct {
+type ErrUnauthorized struct {
 	message string
 }
 
-func NewAuthErr(message string) error {
-	return &AuthErr{message: message}
+func NewErrUnauthorized(message string) error {
+	return &ErrUnauthorized{message: message}
 }
 
-func (err *AuthErr) Error() string {
+func (err *ErrUnauthorized) Error() string {
+	return err.message
+}
+
+type ErrAccessDenied struct {
+	message string
+}
+
+func NewErrAccessDenied(message string) error {
+	return &ErrAccessDenied{message: message}
+}
+
+func (err *ErrAccessDenied) Error() string {
 	return err.message
 }
 

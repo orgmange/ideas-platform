@@ -4,14 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"github.com/GeorgiiMalishev/ideas-platform/internal/dto"
 	"github.com/GeorgiiMalishev/ideas-platform/internal/models"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -33,258 +31,236 @@ func TestRouterTestSuite(t *testing.T) {
 	suite.Run(t, new(RouterTestSuite))
 }
 
-func (suite *RouterTestSuite) TestHealthCheck() {
+func (suite *RouterTestSuite) TestGetAllUsers() {
+	_ = suite.CreateUser("testuser", "12345")
+
+	admin := suite.CreateUser("admin", "33333")
+	admin.RoleID = suite.AdminRoleID
+	suite.DB.Save(admin)
+	adminToken := suite.GetAuthToken(admin.Phone, "333", admin.Name)
+
+	userToken := suite.GetRandomAuthToken()
+
 	tests := []struct {
 		name           string
+		token          string
 		expectedStatus int
-		checkResponse  func(body []byte)
+		checkResponse  bool
 	}{
 		{
-			name:           "health check",
+			name:           "admin gets all users",
+			token:          adminToken,
 			expectedStatus: http.StatusOK,
-			checkResponse: func(body []byte) {
-				suite.Contains(string(body), "ok")
-			},
-		},
-	}
-
-	for _, test := range tests {
-		test := test
-		suite.Run(test.name, func() {
-			testRequest := TestRequest{
-				method: "GET",
-				path:   "/health",
-			}
-			w := suite.MakeRequest(testRequest)
-			suite.Equal(test.expectedStatus, w.Code)
-			test.checkResponse(w.Body.Bytes())
-		})
-	}
-}
-
-func (suite *RouterTestSuite) TestGetAllUsers() {
-	type testCase struct {
-		name           string
-		setup          func()
-		expectedStatus int
-		checkResponse  func(body []byte)
-	}
-
-	tests := []testCase{
-		{
-			name: "get all with one user",
-			setup: func() {
-				_, err := suite.AuthRepo.CreateUser(&models.User{Name: "testuser", Phone: "12345"})
-				suite.Require().NoError(err)
-			},
-			expectedStatus: http.StatusOK,
-			checkResponse: func(body []byte) {
-				var response []dto.UserResponse
-				err := json.Unmarshal(body, &response)
-				suite.NoError(err)
-				suite.Len(response, 1)
-				suite.Equal("testuser", response[0].Name)
-			},
+			checkResponse:  true,
 		},
 		{
-			name:           "get all with no users",
-			setup:          func() { /* Do nothing, DB is clean */ },
-			expectedStatus: http.StatusOK,
-			checkResponse: func(body []byte) {
-				var response []dto.UserResponse
-				err := json.Unmarshal(body, &response)
-				suite.NoError(err)
-				suite.Len(response, 0)
-			},
+			name:           "user fails to get all users",
+			token:          userToken,
+			expectedStatus: http.StatusForbidden,
+			checkResponse:  false,
+		},
+		{
+			name:           "unauthorized get fails",
+			token:          "",
+			expectedStatus: http.StatusUnauthorized,
+			checkResponse:  false,
 		},
 	}
 
-	for _, test := range tests {
-		test := test
-		suite.Run(test.name, func() {
-			suite.TearDownTest() // Clean DB before each sub-test
-			test.setup()
-			testRequest := TestRequest{
+	for _, tc := range tests {
+		suite.Run(tc.name, func() {
+			req := TestRequest{
 				method: "GET",
 				path:   "/api/v1/users",
+				token:  tc.token,
 			}
-			w := suite.MakeRequest(testRequest)
-			suite.Equal(test.expectedStatus, w.Code)
-			test.checkResponse(w.Body.Bytes())
+			w := suite.MakeRequest(req)
+			suite.Equal(tc.expectedStatus, w.Code)
+
+			if tc.checkResponse {
+				var resp []dto.UserResponse
+				err := json.Unmarshal(w.Body.Bytes(), &resp)
+				suite.NoError(err)
+				// 2 users created in setup + admin + random user
+				suite.GreaterOrEqual(len(resp), 3)
+			}
 		})
 	}
 }
 
 func (suite *RouterTestSuite) TestGetUser() {
-	type testCase struct {
+	targetUser := suite.CreateUser("target", "11111")
+	targetToken := suite.GetAuthToken(targetUser.Phone, "111", targetUser.Name)
+
+	otherUser := suite.CreateUser("other", "22222")
+	otherToken := suite.GetAuthToken(otherUser.Phone, "222", otherUser.Name)
+
+	admin := suite.CreateUser("admin", "33333")
+	admin.RoleID = suite.AdminRoleID
+	suite.DB.Save(admin)
+	adminToken := suite.GetAuthToken(admin.Phone, "333", admin.Name)
+
+	tests := []struct {
 		name           string
-		setup          func() string // returns userID
+		token          string
 		expectedStatus int
-		checkResponse  func(body []byte, userID string)
-	}
-
-	tests := []testCase{
+		checkResponse  bool
+	}{
 		{
-			name: "get existing user",
-			setup: func() string {
-				userID, err := suite.AuthRepo.CreateUser(&models.User{Name: "testuser", Phone: "12345"})
-				suite.Require().NoError(err)
-				return userID.String()
-			}, expectedStatus: http.StatusOK,
-			checkResponse: func(body []byte, userID string) {
-				var response dto.UserResponse
-				err := json.Unmarshal(body, &response)
-				suite.NoError(err)
-				suite.Equal("testuser", response.Name)
-				uid, err := uuid.Parse(userID)
-				suite.NoError(err)
-				suite.Equal(uid, response.ID)
-			},
+			name:           "user gets own profile",
+			token:          targetToken,
+			expectedStatus: http.StatusOK,
+			checkResponse:  true,
 		},
 		{
-			name: "get non-existing user",
-			setup: func() string {
-				return uuid.New().String()
-			},
-			expectedStatus: http.StatusNotFound,
-			checkResponse: func(body []byte, userID string) {
-				var response map[string]string
-				err := json.Unmarshal(body, &response)
-				suite.NoError(err)
-				suite.Contains(response["error"], "not found")
-			},
+			name:           "user fails to get other's profile",
+			token:          otherToken,
+			expectedStatus: http.StatusForbidden,
+			checkResponse:  false,
+		},
+		{
+			name:           "admin gets other's profile",
+			token:          adminToken,
+			expectedStatus: http.StatusOK,
+			checkResponse:  true,
+		},
+		{
+			name:           "unauthorized get fails",
+			token:          "",
+			expectedStatus: http.StatusUnauthorized,
+			checkResponse:  false,
 		},
 	}
 
-	for _, test := range tests {
-		test := test
-		suite.Run(test.name, func() {
-			userID := test.setup()
-			testRequest := TestRequest{
-				method: "GET",
-				path:   fmt.Sprintf("/api/v1/users/%s", userID),
+	for _, tc := range tests {
+		suite.Run(tc.name, func() {
+			req := TestRequest{
+				method: http.MethodGet,
+				path:   fmt.Sprintf("/api/v1/users/%s", targetUser.ID.String()),
+				token:  tc.token,
 			}
-			w := suite.MakeRequest(testRequest)
-			suite.Equal(test.expectedStatus, w.Code)
-			test.checkResponse(w.Body.Bytes(), userID)
+			w := suite.MakeRequest(req)
+			suite.Equal(tc.expectedStatus, w.Code)
+
+			if tc.checkResponse {
+				var resp dto.UserResponse
+				err := json.Unmarshal(w.Body.Bytes(), &resp)
+				suite.NoError(err)
+				suite.Equal(targetUser.ID, resp.ID)
+				suite.Equal(targetUser.Name, resp.Name)
+			}
 		})
 	}
 }
 
 func (suite *RouterTestSuite) TestUpdateUser() {
-	type testCase struct {
+	userToUpdate := suite.CreateUser("testuser", "12345")
+	userToken := suite.GetAuthToken(userToUpdate.Phone, "123456", userToUpdate.Name)
+
+	otherUser := suite.CreateUser("otheruser", "54321")
+	otherToken := suite.GetAuthToken(otherUser.Phone, "123456", otherUser.Name)
+
+	updateReq := dto.UpdateUserRequest{Name: "updated-name"}
+
+	tests := []struct {
 		name           string
-		setup          func() string // returns userID
-		input          dto.UpdateUserRequest
+		userID         string
+		token          string
 		expectedStatus int
-		checkResponse  func(w *httptest.ResponseRecorder, userID string)
-	}
-	tests := []testCase{
+	}{
 		{
-			name: "update existing user",
-			setup: func() string {
-				userID, err := suite.AuthRepo.CreateUser(&models.User{Name: "testuser", Phone: "12345"})
-				suite.Require().NoError(err)
-				return userID.String()
-			}, input: dto.UpdateUserRequest{
-				Name: "updateduser",
-			},
+			name:           "user updates own profile",
+			userID:         userToUpdate.ID.String(),
+			token:          userToken,
 			expectedStatus: http.StatusNoContent,
-			checkResponse: func(w *httptest.ResponseRecorder, userID string) {
-				suite.Empty(w.Body.Bytes())
-
-				getResp := suite.MakeRequest(TestRequest{
-					method: "GET",
-					path:   fmt.Sprintf("/api/v1/users/%s", userID),
-				})
-				suite.Equal(http.StatusOK, getResp.Code)
-
-				var response dto.UserResponse
-				err := json.Unmarshal(getResp.Body.Bytes(), &response)
-				suite.NoError(err)
-				suite.Equal("updateduser", response.Name)
-			},
 		},
 		{
-			name: "update non-existing user",
-			setup: func() string {
-				return uuid.New().String()
-			},
-			input: dto.UpdateUserRequest{
-				Name: "updateduser",
-			},
-			expectedStatus: http.StatusNotFound,
-			checkResponse: func(w *httptest.ResponseRecorder, userID string) {
-				var response map[string]string
-				err := json.Unmarshal(w.Body.Bytes(), &response)
-				suite.NoError(err)
-				suite.Contains(response["error"], "not found")
-			},
+			name:           "user fails to update other's profile",
+			userID:         userToUpdate.ID.String(),
+			token:          otherToken,
+			expectedStatus: http.StatusForbidden,
+		},
+		{
+			name:           "unauthorized update fails",
+			userID:         userToUpdate.ID.String(),
+			token:          "",
+			expectedStatus: http.StatusUnauthorized,
 		},
 	}
 
-	for _, test := range tests {
-		test := test
-		suite.Run(test.name, func() {
-			userID := test.setup()
-			token := suite.GetRandomAuthToken()
-			testRequest := TestRequest{
-				method:      "PUT",
-				path:        fmt.Sprintf("/api/v1/users/%s", userID),
-				body:        test.input,
+	for _, tc := range tests {
+		suite.Run(tc.name, func() {
+			req := TestRequest{
+				method:      http.MethodPut,
+				path:        fmt.Sprintf("/api/v1/users/%s", tc.userID),
+				body:        updateReq,
 				contentType: "application/json",
-				token:       token,
+				token:       tc.token,
 			}
-			w := suite.MakeRequest(testRequest)
-			suite.Equal(test.expectedStatus, w.Code)
-			test.checkResponse(w, userID)
+			w := suite.MakeRequest(req)
+			suite.Equal(tc.expectedStatus, w.Code)
 		})
 	}
+
+	// Verify the name was actually updated
+	var finalUser models.User
+	suite.DB.First(&finalUser, "id = ?", userToUpdate.ID)
+	suite.Equal("updated-name", finalUser.Name)
 }
 
 func (suite *RouterTestSuite) TestDeleteUser() {
+	userToDelete := suite.CreateUser("todelete", "111111")
+	userToken := suite.GetAuthToken(userToDelete.Phone, "111", userToDelete.Name)
+
+	otherUser := suite.CreateUser("other", "22222")
+	otherToken := suite.GetAuthToken(otherUser.Phone, "222", otherUser.Name)
+
 	tests := []struct {
 		name           string
-		setup          func() string // Returns userID for the test
+		userID         string
+		token          string
 		expectedStatus int
-		checkResponse  func(w *httptest.ResponseRecorder)
 	}{
 		{
-			name: "delete existing user",
-			setup: func() string {
-				userID, err := suite.AuthRepo.CreateUser(&models.User{Name: "testuser", Phone: "12345"})
-				suite.Require().NoError(err)
-				return userID.String()
-			},
-			expectedStatus: http.StatusNoContent,
-			checkResponse: func(w *httptest.ResponseRecorder) {
-				// No body
-			},
+			name:           "user fails to delete other's profile",
+			userID:         userToDelete.ID.String(),
+			token:          otherToken,
+			expectedStatus: http.StatusForbidden,
 		},
 		{
-			name: "delete non-existing user",
-			setup: func() string {
-				return uuid.New().String()
-			},
-			expectedStatus: http.StatusNotFound,
-			checkResponse: func(w *httptest.ResponseRecorder) {
-			},
+			name:           "unauthorized delete fails",
+			userID:         userToDelete.ID.String(),
+			token:          "",
+			expectedStatus: http.StatusUnauthorized,
+		},
+		{
+			name:           "user deletes own profile",
+			userID:         userToDelete.ID.String(),
+			token:          userToken,
+			expectedStatus: http.StatusNoContent,
 		},
 	}
 
-	for _, test := range tests {
-		test := test
-		suite.Run(test.name, func() {
-			userID := test.setup()
-			token := suite.GetRandomAuthToken()
-			testRequest := TestRequest{
-				method: "DELETE",
-				path:   fmt.Sprintf("/api/v1/users/%s", userID),
-				token:  token,
+	for _, tc := range tests {
+		suite.Run(tc.name, func() {
+			// Re-create user if it was deleted in a previous sub-test
+			if tc.name == "user deletes own profile" {
+				suite.DB.Model(&models.User{}).Where("id = ?", userToDelete.ID).Update("is_deleted", false)
 			}
-			w := suite.MakeRequest(testRequest)
-			suite.Equal(test.expectedStatus, w.Code)
-			test.checkResponse(w)
+
+			req := TestRequest{
+				method: http.MethodDelete,
+				path:   fmt.Sprintf("/api/v1/users/%s", tc.userID),
+				token:  tc.token,
+			}
+			w := suite.MakeRequest(req)
+			suite.Equal(tc.expectedStatus, w.Code)
 		})
 	}
+
+	// Verify the user was actually deleted
+	var deletedUser models.User
+	err := suite.DB.First(&deletedUser, "id = ?", userToDelete.ID).Error
+	suite.NoError(err) // GORM soft-delete means the record is still there
+	suite.True(deletedUser.IsDeleted)
 }

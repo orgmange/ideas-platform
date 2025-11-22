@@ -7,14 +7,14 @@ import (
 )
 
 type User struct {
-	ID        uuid.UUID  `gorm:"primaryKey;type:uuid;default:gen_random_uuid()"`
-	Name      string     `gorm:"not null;size:100"`
-	Phone     string     `gorm:"not null;unique;size:15"`
-	RoleID    *uuid.UUID `gorm:"type:uuid"`
-	Role      Role       `gorm:"foreignKey:RoleID;references:ID;constraint:OnDelete:SET NULL"`
-	IsDeleted bool       `gorm:"default:false"`
-	UpdatedAt time.Time  `gorm:"autoUpdateTime"`
-	CreatedAt time.Time  `gorm:"autoCreateTime"`
+	ID        uuid.UUID `gorm:"primaryKey;type:uuid;default:gen_random_uuid()"`
+	Name      string    `gorm:"not null;size:100"`
+	Phone     string    `gorm:"not null;unique;size:15"`
+	RoleID    uuid.UUID `gorm:"type:uuid"`
+	Role      *Role     `gorm:"foreignKey:RoleID;references:ID;constraint:OnDelete:SET NULL"`
+	IsDeleted bool      `gorm:"default:false"`
+	UpdatedAt time.Time `gorm:"autoUpdateTime"`
+	CreatedAt time.Time `gorm:"autoCreateTime"`
 }
 
 func (User) TableName() string {

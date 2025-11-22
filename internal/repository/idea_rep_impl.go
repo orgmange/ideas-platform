@@ -27,7 +27,7 @@ func (r *ideaRepository) CreateIdea(idea *models.Idea) (*models.Idea, error) {
 
 func (r *ideaRepository) GetIdea(ideaID uuid.UUID) (*models.Idea, error) {
 	var idea models.Idea
-	if err := r.db.Preload("IdeaStatus").First(&idea, "id = ?", ideaID).Error; err != nil {
+	if err := r.db.First(&idea, "id = ?", ideaID).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, apperrors.NewErrNotFound("idea", ideaID.String())
 		}

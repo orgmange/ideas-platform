@@ -75,12 +75,11 @@ func (suite *CoffeeShopIntegrationTestSuite) TestCreateCoffeeShop_Unauthorized()
 
 func (suite *CoffeeShopIntegrationTestSuite) TestGetAllCoffeeShops() {
 	// Create a user first
-	user, err := suite.CreateUser("test-user", "1234567890")
-	suite.Require().NoError(err)
+	user := suite.CreateUser("test-user", "1234567890")
 
 	// Create a coffee shop to be listed
 	newShop := &models.CoffeeShop{ID: uuid.New(), Name: "Shop 1-" + uuid.New().String(), Address: "Addr 1", CreatorID: user.ID}
-	err = suite.DB.Create(newShop).Error
+	err := suite.DB.Create(newShop).Error
 	suite.Require().NoError(err)
 
 	req := TestRequest{
@@ -106,8 +105,7 @@ func (suite *CoffeeShopIntegrationTestSuite) TestGetAllCoffeeShops() {
 }
 
 func (suite *CoffeeShopIntegrationTestSuite) TestGetCoffeeShop() {
-	user, err := suite.CreateUser("test-user", "1234567890")
-	suite.Require().NoError(err)
+	user := suite.CreateUser("test-user", "1234567890")
 	shopID := uuid.New()
 	suite.DB.Create(&models.CoffeeShop{ID: shopID, Name: "Shop 1", Address: "Addr 1", CreatorID: user.ID})
 
@@ -119,7 +117,7 @@ func (suite *CoffeeShopIntegrationTestSuite) TestGetCoffeeShop() {
 
 	suite.Equal(http.StatusOK, w.Code)
 	var resp models.CoffeeShop
-	err = json.Unmarshal(w.Body.Bytes(), &resp)
+	err := json.Unmarshal(w.Body.Bytes(), &resp)
 	suite.NoError(err)
 	suite.Equal(shopID, resp.ID)
 	suite.Equal("Shop 1", resp.Name)

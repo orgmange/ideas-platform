@@ -163,22 +163,22 @@ func (a *AuthUsecaseImpl) VerifyOTP(req *dto.VerifyOTPRequest) (*dto.AuthRespons
 	}
 	if savedOTP.AttemptsLeft <= 0 {
 		logger.Info("no attempts left to virify OTP")
-		return nil, apperrors.NewAuthErr("too much attempts")
+		return nil, apperrors.NewErrUnauthorized("too much attempts")
 	}
 	savedOTP.AttemptsLeft--
 	err = bcrypt.CompareHashAndPassword([]byte(savedOTP.CodeHash), []byte(req.OTP))
 	if err != nil {
 		logger.Info("sended OTP code not match with saved")
 		a.rep.UpdateOTP(savedOTP)
-		return nil, apperrors.NewAuthErr("invalid credentials")
+		return nil, apperrors.NewErrUnauthorized("invalid credentials")
 	}
 
-	id, err := a.rep.GetUserIDByPhone(req.Phone)
+	user, err := a.rep.GetUserByPhone(req.Phone)
 	if err != nil {
 		var errNotFound *apperrors.ErrNotFound
 		if errors.As(err, &errNotFound) {
 			logger.Info("user with this phone not found, creating")
-			id, err = a.createUser(req)
+			user, err = a.createUser(req)
 			if err != nil {
 				return nil, err
 			}
@@ -193,7 +193,7 @@ func (a *AuthUsecaseImpl) VerifyOTP(req *dto.VerifyOTPRequest) (*dto.AuthRespons
 		return nil, err
 	}
 
-	return a.makeAuthResponse(*id, "")
+	return a.makeAuthResponse(user, "")
 }
 
 func generateCode() (string, error) {
@@ -221,7 +221,7 @@ func hashCode(code string) (string, error) {
 	return string(hash), err
 }
 
-func (a *AuthUsecaseImpl) createUser(req *dto.VerifyOTPRequest) (*uuid.UUID, error) {
+func (a *AuthUsecaseImpl) createUser(req *dto.VerifyOTPRequest) (*models.User, error) {
 	logger := a.logger.With(
 		"method", "createUser",
 		"phone", req.Phone,
@@ -237,18 +237,26 @@ func (a *AuthUsecaseImpl) createUser(req *dto.VerifyOTPRequest) (*uuid.UUID, err
 		return nil, apperrors.NewErrNotValid("phone can't be empty")
 	}
 
-	user := &models.User{
-		Phone: req.Phone,
-		Name:  req.Name,
+	role, err := a.rep.GetRoleByName("user")
+	if err != nil {
+		logger.Error("failed get role", "error", err.Error())
+		return nil, err
 	}
-	id, err := a.rep.CreateUser(user)
+
+	user := &models.User{
+		Phone:  req.Phone,
+		Name:   req.Name,
+		RoleID: role.ID,
+	}
+	savedUser, err := a.rep.CreateUser(user)
 	if err != nil {
 		logger.Error("failed create user", "error", err.Error())
 		return nil, err
 	}
+	savedUser.Role = role
 
 	logger.Info("user created successfully")
-	return id, nil
+	return savedUser, nil
 }
 
 func (a *AuthUsecaseImpl) createOTP(phone, hashedCode string) error {
@@ -284,20 +292,26 @@ func (a *AuthUsecaseImpl) Refresh(oldTokenString string) (*dto.AuthResponse, err
 		return nil, err
 	}
 
-	return a.makeAuthResponse(oldToken.UserID, oldToken.RefreshToken)
+	if oldToken.User == nil {
+		a.logger.Warn("refresh token exists but user not found", "token_hash", oldTokenString)
+		_ = a.rep.DeleteRefreshToken(oldTokenString)
+		return nil, apperrors.NewErrUnauthorized("user not found")
+	}
+
+	return a.makeAuthResponse(oldToken.User, oldToken.RefreshToken)
 }
 
-func (a *AuthUsecaseImpl) makeAuthResponse(userID uuid.UUID, oldToken string) (*dto.AuthResponse, error) {
-	logger := a.logger.With("method", "makeAuthResponse", "userID", userID.String())
+func (a *AuthUsecaseImpl) makeAuthResponse(user *models.User, oldToken string) (*dto.AuthResponse, error) {
+	logger := a.logger.With("method", "makeAuthResponse", "userID", user.ID.String())
 
 	logger.Debug("starting make auth response")
-	jwtToken, err := a.createJWTToken(userID)
+	jwtToken, err := a.createJWTToken(user)
 	if err != nil {
 		logger.Error("failed to create JWT token", "error", err.Error())
 		return nil, err
 	}
 
-	refreshToken, err := a.createRefreshToken(userID, oldToken)
+	refreshToken, err := a.createRefreshToken(user.ID, oldToken)
 	if err != nil {
 		logger.Error("failed to create refresh token token", "error", err.Error())
 		return nil, err
@@ -354,14 +368,14 @@ func (a *AuthUsecaseImpl) ValidateJWTToken(tokenString string) (*dto.JWTClaims, 
 	token, err := jwt.ParseWithClaims(tokenString, &claims, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			logger.Info(fmt.Sprintf("unexpexted singing method: %v", token.Header["alg"]))
-			return nil, apperrors.NewAuthErr(fmt.Sprintf("unexpexted singing method: %v", token.Header["alg"]))
+			return nil, apperrors.NewErrUnauthorized(fmt.Sprintf("unexpexted singing method: %v", token.Header["alg"]))
 		}
 
 		return []byte(a.jwtSecret), nil
 	})
 	if err != nil || !token.Valid {
 		logger.Info("invalid token")
-		return nil, apperrors.NewAuthErr("invalid token")
+		return nil, apperrors.NewErrUnauthorized("invalid token")
 	}
 	logger.Info("JWT claims successfully getted", "userID", claims.UserID.String())
 	return &claims, nil
@@ -380,7 +394,7 @@ func (a *AuthUsecaseImpl) validateAndGetRefreshToken(token string) (*models.User
 		var errNotFound *apperrors.ErrNotFound
 		if errors.As(err, &errNotFound) {
 			logger.Info("refresh token not found")
-			return nil, apperrors.NewAuthErr("refresh token not found")
+			return nil, apperrors.NewErrUnauthorized("refresh token not found")
 		}
 
 		logger.Error("failed to get refresh token", "error", err.Error())
@@ -389,7 +403,7 @@ func (a *AuthUsecaseImpl) validateAndGetRefreshToken(token string) (*models.User
 
 	if !savedToken.ExpiresAt.After(time.Now()) {
 		logger.Info("token expired")
-		return nil, apperrors.NewAuthErr("token expired")
+		return nil, apperrors.NewErrUnauthorized("token expired")
 	}
 	return savedToken, nil
 }
@@ -399,9 +413,10 @@ func hashToken(token string) string {
 	return hex.EncodeToString(hash[:])
 }
 
-func (a *AuthUsecaseImpl) createJWTToken(userID uuid.UUID) (*string, error) {
+func (a *AuthUsecaseImpl) createJWTToken(user *models.User) (*string, error) {
 	JWTClaims := dto.JWTClaims{
-		UserID: userID,
+		UserID: user.ID,
+		Role:   user.Role.Name,
 		RegisteredClaims: jwt.RegisteredClaims{
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(a.authCfg.JWTConfig.JWTTokenTimer)),

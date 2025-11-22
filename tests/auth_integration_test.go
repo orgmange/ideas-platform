@@ -142,8 +142,9 @@ func (suite *AuthIntegrationTestSuite) TestVerifyOTP() {
 			// Если нужен существующий пользователь
 			if tt.existingUser {
 				user := &models.User{
-					Name:  tt.userName,
-					Phone: tt.phone,
+					Name:   tt.userName,
+					Phone:  tt.phone,
+					RoleID: suite.UserRoleID,
 				}
 				_, err := suite.AuthRepo.CreateUser(user)
 				suite.NoError(err)
@@ -421,8 +422,9 @@ func (suite *AuthIntegrationTestSuite) TestRefresh() {
 			hashedCode, _ := bcrypt.GenerateFromPassword([]byte(tt.otpCode), bcrypt.DefaultCost)
 
 			user := &models.User{
-				Name:  tt.userName,
-				Phone: tt.phone,
+				Name:   tt.userName,
+				Phone:  tt.phone,
+				RoleID: suite.UserRoleID,
 			}
 			_, err := suite.AuthRepo.CreateUser(user)
 			suite.NoError(err)

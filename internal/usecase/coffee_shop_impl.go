@@ -184,7 +184,7 @@ func (u *CoffeeShopUsecaseImpl) getIfCreator(userID uuid.UUID, shopID uuid.UUID)
 	}
 	if userID != shop.CreatorID {
 		logger.Info("user is not creator of the coffee shop", "creatorID", shop.CreatorID)
-		return nil, apperrors.NewAuthErr("access denied")
+		return nil, apperrors.NewErrUnauthorized("access denied")
 	}
 	logger.Debug("user is confirmed as creator")
 	return shop, nil

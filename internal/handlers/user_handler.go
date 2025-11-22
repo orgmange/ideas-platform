@@ -38,7 +38,12 @@ func (h UserHandler) GetAllUsers(c *gin.Context) {
 	page, _ := strconv.Atoi(pageRaw)
 	limit, _ := strconv.Atoi(limitRaw)
 
-	resp, err := h.uc.GetAllUsers(page, limit)
+	role, ok := parseRoleFromContext(h.logger, c)
+	if !ok {
+		return
+	}
+
+	resp, err := h.uc.GetAllUsers(role, page, limit)
 	if err != nil {
 		HandleAppErrors(err, h.logger, c)
 	}
@@ -56,11 +61,22 @@ func (h UserHandler) GetAllUsers(c *gin.Context) {
 // @Failure 500 {object} dto.ErrorResponse
 // @Router /users/{id} [get]
 func (h UserHandler) GetUser(c *gin.Context) {
-	uuid, ok := parseUUID(h.logger, c)
+	userID, ok := parseUUID(h.logger, c)
 	if !ok {
 		return
 	}
-	user, err := h.uc.GetUser(uuid)
+
+	requesterID, ok := parseUserIDFromContext(h.logger, c)
+	if !ok {
+		return
+	}
+
+	role, ok := parseRoleFromContext(h.logger, c)
+	if !ok {
+		return
+	}
+
+	user, err := h.uc.GetUser(role, requesterID, userID)
 	if err != nil {
 		HandleAppErrors(err, h.logger, c)
 		return
@@ -82,7 +98,7 @@ func (h UserHandler) GetUser(c *gin.Context) {
 // @Router /users/{id} [put]
 // @Security ApiKeyAuth
 func (h UserHandler) UpdateUser(c *gin.Context) {
-	uuid, ok := parseUUID(h.logger, c)
+	userID, ok := parseUUID(h.logger, c)
 	if !ok {
 		return
 	}
@@ -93,8 +109,11 @@ func (h UserHandler) UpdateUser(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "bad request"})
 		return
 	}
-
-	err = h.uc.UpdateUser(uuid, &req)
+	requesterID, ok := parseUserIDFromContext(h.logger, c)
+	if !ok {
+		return
+	}
+	err = h.uc.UpdateUser(requesterID, userID, &req)
 	if err != nil {
 		HandleAppErrors(err, h.logger, c)
 		return
@@ -119,10 +138,14 @@ func (h UserHandler) DeleteUser(c *gin.Context) {
 	if !ok {
 		return
 	}
-
-	err := h.uc.DeleteUser(uuid)
+	requesterID, ok := parseUserIDFromContext(h.logger, c)
+	if !ok {
+		return
+	}
+	err := h.uc.DeleteUser(requesterID, uuid)
 	if err != nil {
 		HandleAppErrors(err, h.logger, c)
+		return
 	}
 
 	c.Status(http.StatusNoContent)
@@ -138,12 +161,17 @@ func (h UserHandler) DeleteUser(c *gin.Context) {
 // @Router /users/me [get]
 // @Security ApiKeyAuth
 func (h UserHandler) GetCurrentAuthentificatedUser(c *gin.Context) {
-	userID, ok := parseUserIDFromContext(c)
+	userID, ok := parseUserIDFromContext(h.logger, c)
 	if !ok {
 		return
 	}
 
-	userResp, err := h.uc.GetUser(userID)
+	role, ok := parseRoleFromContext(h.logger, c)
+	if !ok {
+		return
+	}
+
+	userResp, err := h.uc.GetUser(role, userID, userID)
 	if err != nil {
 		HandleAppErrors(err, h.logger, c)
 		return
