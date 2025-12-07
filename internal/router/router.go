@@ -7,6 +7,7 @@ import (
 	_ "github.com/GeorgiiMalishev/ideas-platform/docs" // swagger docs
 	"github.com/GeorgiiMalishev/ideas-platform/internal/handlers"
 	"github.com/GeorgiiMalishev/ideas-platform/internal/middleware"
+	"github.com/GeorgiiMalishev/ideas-platform/internal/repository" // Added import
 	"github.com/GeorgiiMalishev/ideas-platform/internal/usecase"
 	"github.com/gin-gonic/gin"
 	swaggerFiles "github.com/swaggo/files"
@@ -22,6 +23,8 @@ type AppRouter struct {
 	rewardHandler           *handlers.RewardHandler
 	rewardTypeHandler       *handlers.RewardTypeHandler
 	workerCoffeeShopHandler *handlers.WorkerCoffeeShopHandler
+	likeHandler             *handlers.LikeHandler
+	workerCoffeeShopRepo    repository.WorkerCoffeeShopRepository
 
 	authUsecase usecase.AuthUsecase
 	logger      *slog.Logger
@@ -35,6 +38,8 @@ func NewRouter(cfg *config.Config,
 	rewardHandler *handlers.RewardHandler,
 	rewardTypeHandler *handlers.RewardTypeHandler,
 	workerCoffeeShopHandler *handlers.WorkerCoffeeShopHandler,
+	likeHandler *handlers.LikeHandler,
+	workerCoffeeShopRepo repository.WorkerCoffeeShopRepository, // New parameter
 
 	authUsecase usecase.AuthUsecase,
 	logger *slog.Logger,
@@ -48,6 +53,8 @@ func NewRouter(cfg *config.Config,
 		rewardHandler:           rewardHandler,
 		rewardTypeHandler:       rewardTypeHandler,
 		workerCoffeeShopHandler: workerCoffeeShopHandler,
+		likeHandler:             likeHandler,
+		workerCoffeeShopRepo:    workerCoffeeShopRepo, // Assignment
 
 		authUsecase: authUsecase,
 		logger:      logger,
@@ -105,13 +112,15 @@ func (ar AppRouter) SetupRouter() *gin.Engine {
 		authRequired.POST("/ideas", ar.ideaHandler.CreateIdea)
 		authRequired.PUT("/ideas/:id", ar.ideaHandler.UpdateIdea)
 		authRequired.DELETE("/ideas/:id", ar.ideaHandler.DeleteIdea)
+		authRequired.POST("/ideas/:id/like", ar.likeHandler.LikeIdea)
+		authRequired.DELETE("/ideas/:id/unlike", ar.likeHandler.UnlikeIdea)
 		        authRequired.GET("/rewards/type/:id", ar.rewardTypeHandler.GetRewardType)
 		
 		        authRequired.GET("/users/:id/coffee-shops", ar.workerCoffeeShopHandler.ListCoffeeShopsForWorker)
 		    }
 		
 		    adminRequired := authRequired.Group("/admin")
-		    adminRequired.Use(middleware.AdminFilter(ar.logger))
+		    adminRequired.Use(middleware.AdminFilter(ar.workerCoffeeShopRepo, ar.logger))
 		    {
 		        adminRequired.GET("/health", handlers.HealthCheck(ar.cfg))
 		        adminRequired.POST("/rewards", ar.rewardHandler.GiveReward)

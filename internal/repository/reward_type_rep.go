@@ -1,14 +1,15 @@
 package repository
 
 import (
+	"context"
 	"github.com/GeorgiiMalishev/ideas-platform/internal/models"
 	"github.com/google/uuid"
 )
 
 type RewardTypeRepository interface {
-	GetRewardType(rewardTypeID uuid.UUID) (*models.RewardType, error)
-	GetRewardsTypeByCoffeeShopID(CoffeeShopID uuid.UUID, offset, limit int) ([]models.RewardType, error)
-	UpdateReward(rewardType *models.RewardType) error
-	DeleteReward(rewardTypeID uuid.UUID) error
-	CreateReward(rewardType *models.RewardType) (*models.RewardType, error)
+	GetRewardType(ctx context.Context, rewardTypeID uuid.UUID) (*models.RewardType, error)
+	GetRewardsTypeByCoffeeShopID(ctx context.Context, CoffeeShopID uuid.UUID, offset, limit int) ([]models.RewardType, error)
+	UpdateReward(ctx context.Context, rewardType *models.RewardType) error
+	DeleteReward(ctx context.Context, rewardTypeID uuid.UUID) error
+	CreateReward(ctx context.Context, rewardType *models.RewardType) (*models.RewardType, error)
 }

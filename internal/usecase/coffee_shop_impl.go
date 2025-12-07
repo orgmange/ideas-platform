@@ -1,6 +1,7 @@
 package usecase
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 
@@ -14,34 +15,38 @@ import (
 type CoffeeShopUsecaseImpl struct {
 	rep         repository.CoffeeShopRep
 	workerCsRep repository.WorkerCoffeeShopRepository
+	adminRoleID uuid.UUID // Added adminRoleID
 	logger      *slog.Logger
 }
 
 func NewCoffeeShopUsecase(rep repository.CoffeeShopRep,
 	workerCsRep repository.WorkerCoffeeShopRepository,
+	adminRoleID uuid.UUID,
 	logger *slog.Logger,
 ) CoffeeShopUsecase {
 	return &CoffeeShopUsecaseImpl{
 		rep:         rep,
 		workerCsRep: workerCsRep,
+		adminRoleID: adminRoleID,
 		logger:      logger,
 	}
 }
 
-func (u *CoffeeShopUsecaseImpl) CreateCoffeeShop(userID uuid.UUID, req *dto.CreateCoffeeShopRequest) (*dto.CoffeeShopResponse, error) {
+func (u *CoffeeShopUsecaseImpl) CreateCoffeeShop(ctx context.Context, userID uuid.UUID, req *dto.CreateCoffeeShopRequest) (*dto.CoffeeShopResponse, error) {
 	logger := u.logger.With("method", "CreateCoffeeShop", "userID", userID.String())
 	logger.Debug("starting create coffee shop")
 
 	shop := toCoffeeShop(req)
 	shop.CreatorID = userID
-	createdShop, err := u.rep.CreateCoffeeShop(shop)
+	createdShop, err := u.rep.CreateCoffeeShop(ctx, shop)
 	if err != nil {
 		logger.Error("failed to create coffee shop", "error", err.Error())
 		return nil, err
 	}
-	_, err = u.workerCsRep.Create(&models.WorkerCoffeeShop{
-		CoffeeShopID: &createdShop.CreatorID,
+	_, err = u.workerCsRep.Create(ctx, &models.WorkerCoffeeShop{
+		CoffeeShopID: &createdShop.ID,
 		WorkerID:     &userID,
+		RoleID:       &u.adminRoleID, // Assign AdminRoleID
 	})
 	if err != nil {
 		return nil, err
@@ -50,15 +55,15 @@ func (u *CoffeeShopUsecaseImpl) CreateCoffeeShop(userID uuid.UUID, req *dto.Crea
 	return toCoffeeShopResponse(createdShop), nil
 }
 
-func (u *CoffeeShopUsecaseImpl) DeleteCoffeeShop(userID uuid.UUID, ID uuid.UUID) error {
+func (u *CoffeeShopUsecaseImpl) DeleteCoffeeShop(ctx context.Context, userID uuid.UUID, ID uuid.UUID) error {
 	logger := u.logger.With("method", "DeleteCoffeeShop", "userID", userID.String(), "shopID", ID.String())
 	logger.Debug("starting delete coffee shop")
 
-	_, err := u.getIfCreator(userID, ID)
+	_, err := u.getIfCreator(ctx, userID, ID)
 	if err != nil {
 		return err
 	}
-	err = u.rep.DeleteCoffeeShop(ID)
+	err = u.rep.DeleteCoffeeShop(ctx, ID)
 	if err != nil {
 		var errNotFound *apperrors.ErrNotFound
 		if errors.As(err, &errNotFound) {
@@ -73,7 +78,7 @@ func (u *CoffeeShopUsecaseImpl) DeleteCoffeeShop(userID uuid.UUID, ID uuid.UUID)
 	return nil
 }
 
-func (u *CoffeeShopUsecaseImpl) GetAllCoffeeShops(page int, limit int) ([]dto.CoffeeShopResponse, error) {
+func (u *CoffeeShopUsecaseImpl) GetAllCoffeeShops(ctx context.Context, page int, limit int) ([]dto.CoffeeShopResponse, error) {
 	logger := u.logger.With("method", "GetAllCoffeeShops", "page", page, "limit", limit)
 	logger.Debug("starting get all coffee shops")
 
@@ -83,7 +88,7 @@ func (u *CoffeeShopUsecaseImpl) GetAllCoffeeShops(page int, limit int) ([]dto.Co
 	if page < 0 {
 		page = 0
 	}
-	shops, err := u.rep.GetAllCoffeeShops(limit, limit*page)
+	shops, err := u.rep.GetAllCoffeeShops(ctx, limit, limit*page)
 	if err != nil {
 		logger.Error("failed to get all coffee shops", "error", err.Error())
 		return nil, err
@@ -93,11 +98,11 @@ func (u *CoffeeShopUsecaseImpl) GetAllCoffeeShops(page int, limit int) ([]dto.Co
 	return toCoffeeShopResponses(shops), nil
 }
 
-func (u *CoffeeShopUsecaseImpl) GetCoffeeShop(ID uuid.UUID) (*dto.CoffeeShopResponse, error) {
+func (u *CoffeeShopUsecaseImpl) GetCoffeeShop(ctx context.Context, ID uuid.UUID) (*dto.CoffeeShopResponse, error) {
 	logger := u.logger.With("method", "GetCoffeeShop", "shopID", ID.String())
 	logger.Debug("starting get coffee shop")
 
-	shop, err := u.rep.GetCoffeeShop(ID)
+	shop, err := u.rep.GetCoffeeShop(ctx, ID)
 	if err != nil {
 		var errNotFound *apperrors.ErrNotFound
 		if errors.As(err, &errNotFound) {
@@ -112,11 +117,11 @@ func (u *CoffeeShopUsecaseImpl) GetCoffeeShop(ID uuid.UUID) (*dto.CoffeeShopResp
 	return toCoffeeShopResponse(shop), nil
 }
 
-func (u *CoffeeShopUsecaseImpl) UpdateCoffeeShop(userID uuid.UUID, ID uuid.UUID, req *dto.UpdateCoffeeShopRequest) error {
+func (u *CoffeeShopUsecaseImpl) UpdateCoffeeShop(ctx context.Context, userID uuid.UUID, ID uuid.UUID, req *dto.UpdateCoffeeShopRequest) error {
 	logger := u.logger.With("method", "UpdateCoffeeShop", "userID", userID.String(), "shopID", ID.String())
 	logger.Debug("starting update coffee shop")
 
-	shop, err := u.getIfCreator(userID, ID)
+	shop, err := u.getIfCreator(ctx, userID, ID)
 	if err != nil {
 		return err
 	}
@@ -137,7 +142,7 @@ func (u *CoffeeShopUsecaseImpl) UpdateCoffeeShop(userID uuid.UUID, ID uuid.UUID,
 		shop.Rules = req.Rules
 	}
 
-	err = u.rep.UpdateCoffeeShop(shop)
+	err = u.rep.UpdateCoffeeShop(ctx, shop)
 	if err != nil {
 		var errNotFound *apperrors.ErrNotFound
 		if errors.As(err, &errNotFound) {
@@ -182,11 +187,11 @@ func toCoffeeShopResponses(shops []models.CoffeeShop) []dto.CoffeeShopResponse {
 	return res
 }
 
-func (u *CoffeeShopUsecaseImpl) getIfCreator(userID uuid.UUID, shopID uuid.UUID) (*models.CoffeeShop, error) {
+func (u *CoffeeShopUsecaseImpl) getIfCreator(ctx context.Context, userID uuid.UUID, shopID uuid.UUID) (*models.CoffeeShop, error) {
 	logger := u.logger.With("method", "getIfCreator", "userID", userID.String(), "shopID", shopID.String())
 	logger.Debug("checking if user is creator of coffee shop")
 
-	shop, err := u.rep.GetCoffeeShop(shopID)
+	shop, err := u.rep.GetCoffeeShop(ctx, shopID)
 	if err != nil {
 		var errNotFound *apperrors.ErrNotFound
 		if errors.As(err, &errNotFound) {

@@ -58,6 +58,13 @@ func main() {
 		logger.Error("Failed to auto-migrate database:", slog.String("error", err.Error()))
 		return
 	}
+
+	adminRole := models.Role{
+		Name: "admin",
+	}
+	db.FirstOrCreate(&adminRole, "name = ?", "admin")
+	adminRoleID := adminRole.ID
+
 	workerCsRepo := repository.NewWorkerCoffeeShopRepository(db)
 
 	userRepo := repository.NewUserRepository(db)
@@ -65,7 +72,7 @@ func main() {
 	userHandler := handlers.NewUserHandler(userUsecase, logger)
 
 	coffeeShopRepo := repository.NewCoffeeShopRepository(db)
-	csUscase := usecase.NewCoffeeShopUsecase(coffeeShopRepo, workerCsRepo, logger)
+	csUscase := usecase.NewCoffeeShopUsecase(coffeeShopRepo, workerCsRepo, adminRoleID, logger)
 	csHandler := handlers.NewCoffeeShopHandler(csUscase, logger)
 
 	authRepo := repository.NewAuthRepository(db)
@@ -73,10 +80,25 @@ func main() {
 	authHandler := handlers.NewAuthHandler(authUsecase, logger)
 
 	ideaRepo := repository.NewIdeaRepository(db)
-	ideaUsecase := usecase.NewIdeaUsecase(ideaRepo, logger)
+	likeRepo := repository.NewLikeRepository(db)
+	ideaUsecase := usecase.NewIdeaUsecase(ideaRepo, workerCsRepo, likeRepo, logger)
 	ideaHandler := handlers.NewIdeaHandler(ideaUsecase, logger)
 
-	ar := router.NewRouter(cfg, userHandler, csHandler, authHandler, ideaHandler, nil, authUsecase, logger)
+	likeUsecase := usecase.NewLikeUsecase(likeRepo, logger)
+	likeHandler := handlers.NewLikeHandler(likeUsecase, logger)
+
+	rewardRepo := repository.NewRewardRepository(db)
+	rewardUsecase := usecase.NewRewardUsecase(rewardRepo, ideaRepo, logger)
+	rewardHandler := handlers.NewRewardHandler(rewardUsecase, logger)
+
+	rewardTypeRepo := repository.NewRewardTypeRepository(db)
+	rewardTypeUsecase := usecase.NewRewardTypeUsecase(rewardTypeRepo, coffeeShopRepo, workerCsRepo, logger)
+	rewardTypeHandler := handlers.NewRewardTypeHandler(rewardTypeUsecase, logger)
+
+	workerCoffeeShopUsecase := usecase.NewWorkerCoffeeShopUsecase(workerCsRepo, coffeeShopRepo, userRepo, logger)
+	workerCoffeeShopHandler := handlers.NewWorkerCoffeeShopHandler(workerCoffeeShopUsecase, logger)
+
+	ar := router.NewRouter(cfg, userHandler, csHandler, authHandler, ideaHandler, rewardHandler, rewardTypeHandler, workerCoffeeShopHandler, likeHandler, workerCsRepo, authUsecase, logger)
 	r := ar.SetupRouter()
 	err = r.Run(":8080")
 	if err != nil {

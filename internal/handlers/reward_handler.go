@@ -49,7 +49,7 @@ func (h *RewardHandler) GiveReward(c *gin.Context) {
 		return
 	}
 
-	resp, err := h.uc.GiveReward(actorID, &req)
+	resp, err := h.uc.GiveReward(c.Request.Context(), actorID, &req)
 	if err != nil {
 		HandleAppErrors(err, h.logger, c)
 		return
@@ -83,7 +83,7 @@ func (h *RewardHandler) RevokeReward(c *gin.Context) {
 		return
 	}
 
-	err := h.uc.RevokeReward(actorID, rewardID)
+	err := h.uc.RevokeReward(c.Request.Context(), actorID, rewardID)
 	if err != nil {
 		HandleAppErrors(err, h.logger, c)
 		return
@@ -108,7 +108,7 @@ func (h *RewardHandler) GetReward(c *gin.Context) {
 		return
 	}
 
-	resp, err := h.uc.GetReward(rewardID)
+	resp, err := h.uc.GetReward(c.Request.Context(), rewardID)
 	if err != nil {
 		HandleAppErrors(err, h.logger, c)
 		return
@@ -145,7 +145,7 @@ func (h *RewardHandler) GetRewardsForCoffeeShop(c *gin.Context) {
 	page, _ := strconv.Atoi(c.Query("page"))
 	limit, _ := strconv.Atoi(c.Query("limit"))
 
-	resp, err := h.uc.GetRewardsForCoffeeShop(actorID, coffeeShopID, page, limit)
+	resp, err := h.uc.GetRewardsForCoffeeShop(c.Request.Context(), actorID, coffeeShopID, page, limit)
 	if err != nil {
 		HandleAppErrors(err, h.logger, c)
 		return
@@ -174,7 +174,7 @@ func (h *RewardHandler) GetMyRewards(c *gin.Context) {
 	page, _ := strconv.Atoi(c.Query("page"))
 	limit, _ := strconv.Atoi(c.Query("limit"))
 
-	resp, err := h.uc.GetMyRewards(userID, page, limit)
+	resp, err := h.uc.GetMyRewards(c.Request.Context(), userID, page, limit)
 	if err != nil {
 		HandleAppErrors(err, h.logger, c)
 		return

@@ -32,9 +32,6 @@ func TestRewardIntegrationTestSuite(t *testing.T) {
 func (suite *RewardIntegrationTestSuite) createAdminTestPrerequisites() (adminToken string, coffeeShop models.CoffeeShop, idea models.Idea, rewardType models.RewardType, regularUserToken string) {
 	// 1. Create Admin User
 	admin := suite.CreateUser("test-admin", "9999999999")
-	admin.RoleID = suite.AdminRoleID
-	err := suite.DB.Save(admin).Error
-	suite.Require().NoError(err)
 	adminToken = suite.RegisterUserAndGetToken(admin)
 
 	// 2. Create Coffee Shop (owned by admin for simplicity)
@@ -43,7 +40,15 @@ func (suite *RewardIntegrationTestSuite) createAdminTestPrerequisites() (adminTo
 		Address:   "1 Admin St",
 		CreatorID: admin.ID,
 	}
-	err = suite.DB.Create(&coffeeShop).Error
+	err := suite.DB.Create(&coffeeShop).Error
+	suite.Require().NoError(err)
+
+	// Make the admin a worker in the shop
+	err = suite.DB.Create(&models.WorkerCoffeeShop{
+		WorkerID:     &admin.ID,
+		CoffeeShopID: &coffeeShop.ID,
+		RoleID:       &suite.AdminRoleID,
+	}).Error
 	suite.Require().NoError(err)
 
 	// 3. Create Regular User (Idea Author)

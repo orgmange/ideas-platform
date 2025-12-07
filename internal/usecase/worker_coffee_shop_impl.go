@@ -1,6 +1,7 @@
 package usecase
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -33,15 +34,15 @@ func NewWorkerCoffeeShopUsecase(
 	}
 }
 
-func (u *WorkerCoffeeShopUsecaseImpl) AddWorker(actorID uuid.UUID, req *dto.AddWorkerToShopRequest) (*dto.WorkerCoffeeShopResponse, error) {
+func (u *WorkerCoffeeShopUsecaseImpl) AddWorker(ctx context.Context, actorID uuid.UUID, req *dto.AddWorkerToShopRequest) (*dto.WorkerCoffeeShopResponse, error) {
 	logger := u.logger.With("method", "AddWorker", "actorID", actorID, "workerID", req.WorkerID, "shopID", req.CoffeeShopID)
 	logger.Debug("starting to add worker to shop")
 
-	if err := u.checkShopAdminAccess(actorID, req.CoffeeShopID); err != nil {
+	if err := u.checkShopAdminAccess(ctx, actorID, req.CoffeeShopID); err != nil {
 		return nil, err
 	}
 
-	exists, err := u.userRepo.IsUserExist(req.WorkerID)
+	exists, err := u.userRepo.IsUserExist(ctx, req.WorkerID)
 	if err != nil {
 		logger.Error("failed to check user existence", "error", err)
 		return nil, err
@@ -51,7 +52,7 @@ func (u *WorkerCoffeeShopUsecaseImpl) AddWorker(actorID uuid.UUID, req *dto.AddW
 		return nil, apperrors.NewErrNotFound("user", req.WorkerID.String())
 	}
 
-	_, err = u.workerShopRepo.GetByUserIDAndShopID(req.WorkerID, req.CoffeeShopID)
+	_, err = u.workerShopRepo.GetByUserIDAndShopID(ctx, req.WorkerID, req.CoffeeShopID)
 	if err != nil {
 		var errNotFound *apperrors.ErrNotFound
 		if !errors.As(err, &errNotFound) {
@@ -68,7 +69,7 @@ func (u *WorkerCoffeeShopUsecaseImpl) AddWorker(actorID uuid.UUID, req *dto.AddW
 		CoffeeShopID: &req.CoffeeShopID,
 	}
 
-	createdRelation, err := u.workerShopRepo.Create(relation)
+	createdRelation, err := u.workerShopRepo.Create(ctx, relation)
 	if err != nil {
 		logger.Error("failed to create worker-shop relation", "error", err)
 		return nil, err
@@ -78,20 +79,20 @@ func (u *WorkerCoffeeShopUsecaseImpl) AddWorker(actorID uuid.UUID, req *dto.AddW
 	return toWorkerCoffeeShopResponse(createdRelation), nil
 }
 
-func (u *WorkerCoffeeShopUsecaseImpl) RemoveWorker(actorID, workerShopRelationID uuid.UUID) error {
+func (u *WorkerCoffeeShopUsecaseImpl) RemoveWorker(ctx context.Context, actorID, workerShopRelationID uuid.UUID) error {
 	logger := u.logger.With("method", "RemoveWorker", "actorID", actorID, "relationID", workerShopRelationID)
 	logger.Debug("starting to remove worker from shop")
 
-	relation, err := u.workerShopRepo.GetByID(workerShopRelationID)
+	relation, err := u.workerShopRepo.GetByID(ctx, workerShopRelationID)
 	if err != nil {
 		return err // Error already logged and classified by repository
 	}
 
-	if err := u.checkShopAdminAccess(actorID, *relation.CoffeeShopID); err != nil {
+	if err := u.checkShopAdminAccess(ctx, actorID, *relation.CoffeeShopID); err != nil {
 		return err
 	}
 
-	if err := u.workerShopRepo.Delete(workerShopRelationID); err != nil {
+	if err := u.workerShopRepo.Delete(ctx, workerShopRelationID); err != nil {
 		logger.Error("failed to delete worker-shop relation", "error", err)
 		return err
 	}
@@ -100,11 +101,11 @@ func (u *WorkerCoffeeShopUsecaseImpl) RemoveWorker(actorID, workerShopRelationID
 	return nil
 }
 
-func (u *WorkerCoffeeShopUsecaseImpl) ListWorkers(actorID, shopID uuid.UUID, page, limit int) ([]dto.UserResponse, error) {
+func (u *WorkerCoffeeShopUsecaseImpl) ListWorkers(ctx context.Context, actorID, shopID uuid.UUID, page, limit int) ([]dto.UserResponse, error) {
 	logger := u.logger.With("method", "ListWorkers", "actorID", actorID, "shopID", shopID, "page", page, "limit", limit)
 	logger.Debug("starting to list workers in shop")
 
-	if err := u.checkShopAdminAccess(actorID, shopID); err != nil {
+	if err := u.checkShopAdminAccess(ctx, actorID, shopID); err != nil {
 		return nil, err
 	}
 
@@ -115,7 +116,7 @@ func (u *WorkerCoffeeShopUsecaseImpl) ListWorkers(actorID, shopID uuid.UUID, pag
 		page = 0
 	}
 
-	relations, err := u.workerShopRepo.ListByCoffeeShopID(shopID, limit, page*limit)
+	relations, err := u.workerShopRepo.ListByCoffeeShopID(ctx, shopID, limit, page*limit)
 	if err != nil {
 		logger.Error("failed to list workers by coffee shop id", "error", err)
 		return nil, err
@@ -125,7 +126,7 @@ func (u *WorkerCoffeeShopUsecaseImpl) ListWorkers(actorID, shopID uuid.UUID, pag
 	return toUserResponsesFromRelations(relations), nil
 }
 
-func (u *WorkerCoffeeShopUsecaseImpl) ListShopsForWorker(actorID, workerID uuid.UUID, page, limit int) ([]dto.CoffeeShopResponse, error) {
+func (u *WorkerCoffeeShopUsecaseImpl) ListShopsForWorker(ctx context.Context, actorID, workerID uuid.UUID, page, limit int) ([]dto.CoffeeShopResponse, error) {
 	logger := u.logger.With("method", "ListShopsForWorker", "actorID", actorID, "workerID", workerID, "page", page, "limit", limit)
 	logger.Debug("starting to list shops for worker")
 
@@ -141,7 +142,7 @@ func (u *WorkerCoffeeShopUsecaseImpl) ListShopsForWorker(actorID, workerID uuid.
 		page = 0
 	}
 
-	relations, err := u.workerShopRepo.ListByWorkerID(workerID, limit, page*limit)
+	relations, err := u.workerShopRepo.ListByWorkerID(ctx, workerID, limit, page*limit)
 	if err != nil {
 		logger.Error("failed to list shops by worker id", "error", err)
 		return nil, err
@@ -153,10 +154,10 @@ func (u *WorkerCoffeeShopUsecaseImpl) ListShopsForWorker(actorID, workerID uuid.
 
 // checkShopAdminAccess verifies if a user is either the creator of the shop,
 // or a worker in the shop with the 'admin' role.
-func (u *WorkerCoffeeShopUsecaseImpl) checkShopAdminAccess(actorID, shopID uuid.UUID) error {
+func (u *WorkerCoffeeShopUsecaseImpl) checkShopAdminAccess(ctx context.Context, actorID, shopID uuid.UUID) error {
 	logger := u.logger.With("method", "checkShopAdminAccess", "actorID", actorID, "shopID", shopID)
 
-	worker, err := u.workerShopRepo.GetByUserIDAndShopID(actorID, shopID)
+	worker, err := u.workerShopRepo.GetByUserIDAndShopID(ctx, actorID, shopID)
 	if err != nil {
 		var errNotFound *apperrors.ErrNotFound
 		if errors.As(err, &errNotFound) {

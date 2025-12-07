@@ -45,14 +45,10 @@ func (suite *WorkerCoffeeShopIntegrationTestSuite) createWorkerTestPrerequisites
 
 	// 1. Create Coffee Shop Creator (Owner)
 	creator = suite.CreateUser("shop-creator", "1000000001")
-	creator.RoleID = suite.AdminRoleID // Make creator an admin
-	suite.DB.Save(creator)
 	creatorToken = suite.RegisterUserAndGetToken(creator)
 
 	// 2. Create another Admin User
 	admin = suite.CreateUser("shop-admin", "1000000002")
-	admin.RoleID = suite.AdminRoleID
-	suite.DB.Save(admin)
 	adminToken = suite.RegisterUserAndGetToken(admin)
 
 	// 3. Create a regular user to be a worker
@@ -72,17 +68,15 @@ func (suite *WorkerCoffeeShopIntegrationTestSuite) createWorkerTestPrerequisites
 	err := suite.DB.Create(shop).Error
 	suite.Require().NoError(err)
 
+	// Make creator and admin workers in the shop with admin role
+	suite.DB.Create(&models.WorkerCoffeeShop{WorkerID: &creator.ID, CoffeeShopID: &shop.ID, RoleID: &suite.AdminRoleID})
+	suite.DB.Create(&models.WorkerCoffeeShop{WorkerID: &admin.ID, CoffeeShopID: &shop.ID, RoleID: &suite.AdminRoleID})
+
 	return
 }
 
 func (suite *WorkerCoffeeShopIntegrationTestSuite) TestAddWorker() {
-	_, creatorToken, admin, adminToken, worker, _, otherUser, otherUserToken, shop := suite.createWorkerTestPrerequisites()
-
-	// Make the admin a worker in the shop, so they have admin rights over it
-	suite.DB.Create(&models.WorkerCoffeeShop{
-		WorkerID:     &admin.ID,
-		CoffeeShopID: &shop.ID,
-	})
+	_, creatorToken, _, adminToken, worker, _, otherUser, otherUserToken, shop := suite.createWorkerTestPrerequisites()
 
 	tests := []struct {
 		name           string
@@ -144,14 +138,14 @@ func (suite *WorkerCoffeeShopIntegrationTestSuite) TestAddWorker() {
 }
 
 func (suite *WorkerCoffeeShopIntegrationTestSuite) TestListAndRemoveWorker() {
-	_, creatorToken, admin, adminToken, worker, _, _, otherUserToken, shop := suite.createWorkerTestPrerequisites()
+	creator, creatorToken, admin, adminToken, worker, _, _, otherUserToken, shop := suite.createWorkerTestPrerequisites()
 
-	// Setup: Make admin a worker and add 'worker' user to the shop
-	suite.DB.Create(&models.WorkerCoffeeShop{WorkerID: &admin.ID, CoffeeShopID: &shop.ID})
-	wcs := &models.WorkerCoffeeShop{WorkerID: &worker.ID, CoffeeShopID: &shop.ID}
-	suite.DB.Create(wcs)
+	// Add the worker to the shop to test listing and removal
+	wcs := &models.WorkerCoffeeShop{WorkerID: &worker.ID, CoffeeShopID: &shop.ID, RoleID: &suite.UserRoleID}
+	err := suite.DB.Create(wcs).Error
+	suite.Require().NoError(err, "Failed to add worker to shop for testing")
 
-	suite.Run("List Workers - Success by Creator", func() {
+	suite.Run("List Workers - Success by Creator with new worker", func() {
 		req := TestRequest{
 			method: http.MethodGet,
 			path:   fmt.Sprintf("/api/v1/admin/coffee-shops/%s/workers", shop.ID),
@@ -162,7 +156,7 @@ func (suite *WorkerCoffeeShopIntegrationTestSuite) TestListAndRemoveWorker() {
 		var resp []dto.UserResponse
 		err := json.Unmarshal(w.Body.Bytes(), &resp)
 		suite.NoError(err)
-		suite.Len(resp, 2) // admin + worker
+		suite.Len(resp, 3) // creator + admin + new worker
 	})
 
 	suite.Run("List Workers - Fail by non-admin", func() {
@@ -198,7 +192,7 @@ func (suite *WorkerCoffeeShopIntegrationTestSuite) TestListAndRemoveWorker() {
 		var relation models.WorkerCoffeeShop
 		err := suite.DB.Unscoped().First(&relation, "id = ?", wcs.ID).Error
 		suite.NoError(err)
-		suite.True(relation.IsDeleted)
+		suite.True(relation.IsDeleted, "Expected IsDeleted to be true for soft delete")
 	})
 
 	suite.Run("List Workers - Verify worker removed", func() {
@@ -212,8 +206,23 @@ func (suite *WorkerCoffeeShopIntegrationTestSuite) TestListAndRemoveWorker() {
 		var resp []dto.UserResponse
 		err := json.Unmarshal(w.Body.Bytes(), &resp)
 		suite.NoError(err)
-		suite.Len(resp, 1) // Only admin should remain
-		suite.Equal(admin.ID, resp[0].ID)
+		suite.Len(resp, 2) // Only creator + admin should remain
+
+		// Verify that the correct users are present
+		foundCreator := false
+		foundAdmin := false
+		for _, u := range resp {
+			if u.ID == creator.ID {
+				foundCreator = true
+			}
+			if u.ID == admin.ID {
+				foundAdmin = true
+			}
+			// Fail if the removed worker is still present
+			suite.NotEqual(worker.ID, u.ID, "Removed worker should not be in the list")
+		}
+		suite.True(foundCreator, "Creator should be in the list of workers")
+		suite.True(foundAdmin, "Admin should be in the list of workers")
 	})
 }
 

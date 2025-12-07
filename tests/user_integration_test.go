@@ -32,13 +32,13 @@ func TestRouterTestSuite(t *testing.T) {
 }
 
 func (suite *RouterTestSuite) TestGetAllUsers() {
-	_ = suite.CreateUser("testuser", "12345")
-
-	admin := suite.CreateUser("admin", "33333")
-	admin.RoleID = suite.AdminRoleID
-	suite.DB.Save(admin)
-	adminToken := suite.GetAuthToken(admin.Phone, "333", admin.Name)
-
+	    admin := suite.CreateUser("admin", "33333")
+		adminToken := suite.GetAuthToken(admin.Phone, "333", admin.Name)
+		// Create a coffee shop and make the user an admin
+		coffeeShop := &models.CoffeeShop{Name: "Admin's Test Shop", CreatorID: admin.ID, Address: "123 Admin Lane"}
+		suite.DB.Create(coffeeShop)
+		suite.DB.Create(&models.WorkerCoffeeShop{WorkerID: &admin.ID, CoffeeShopID: &coffeeShop.ID, RoleID: &suite.AdminRoleID})
+	
 	userToken := suite.GetRandomAuthToken()
 
 	tests := []struct {
@@ -82,7 +82,7 @@ func (suite *RouterTestSuite) TestGetAllUsers() {
 				err := json.Unmarshal(w.Body.Bytes(), &resp)
 				suite.NoError(err)
 				// 2 users created in setup + admin + random user
-				suite.GreaterOrEqual(len(resp), 3)
+				suite.GreaterOrEqual(len(resp), 2)
 			}
 		})
 	}
@@ -96,9 +96,12 @@ func (suite *RouterTestSuite) TestGetUser() {
 	otherToken := suite.GetAuthToken(otherUser.Phone, "222", otherUser.Name)
 
 	admin := suite.CreateUser("admin", "33333")
-	admin.RoleID = suite.AdminRoleID
-	suite.DB.Save(admin)
 	adminToken := suite.GetAuthToken(admin.Phone, "333", admin.Name)
+	// Create a coffee shop and make the user an admin
+	coffeeShop := &models.CoffeeShop{Name: "Admin's Test Shop", CreatorID: admin.ID, Address: "123 Admin Lane"}
+	suite.DB.Create(coffeeShop)
+	suite.DB.Create(&models.WorkerCoffeeShop{WorkerID: &admin.ID, CoffeeShopID: &coffeeShop.ID, RoleID: &suite.AdminRoleID})
+
 
 	tests := []struct {
 		name           string

@@ -176,9 +176,6 @@ func (suite *IdeaIntegrationTestSuite) TestUpdateIdea() {
 	otherToken := suite.GetRandomAuthToken()
 
 	admin := suite.CreateUser("admin-idea", "987654321")
-	admin.RoleID = suite.AdminRoleID
-	err := suite.DB.Save(admin).Error
-	suite.Require().NoError(err)
 	adminToken := suite.RegisterUserAndGetToken(admin)
 	updTitle := "Updated Title"
 	updateReq := dto.UpdateIdeaRequest{Title: &updTitle}
@@ -250,8 +247,15 @@ func (suite *IdeaIntegrationTestSuite) TestDeleteIdea() {
 	otherToken := suite.GetRandomAuthToken()
 
 	admin := suite.CreateUser("admin-idea-del", "123123123")
-	admin.RoleID = suite.AdminRoleID
 	adminToken := suite.RegisterUserAndGetToken(admin)
+
+	// Make the admin a worker in the shop to test admin deletion privileges
+	err := suite.DB.Create(&models.WorkerCoffeeShop{
+		WorkerID:     &admin.ID,
+		CoffeeShopID: &coffeeShop.ID,
+		RoleID:       &suite.AdminRoleID,
+	}).Error
+	suite.Require().NoError(err)
 
 	suite.Run("Author can delete their idea", func() {
 		idea := suite.createTestIdea(author, coffeeShop, category)
@@ -275,13 +279,13 @@ func (suite *IdeaIntegrationTestSuite) TestDeleteIdea() {
 			token:  otherToken,
 		}
 		w := suite.MakeRequest(req)
-		suite.Equal(http.StatusUnauthorized, w.Code)
+		suite.Equal(http.StatusForbidden, w.Code)
 		var count int64
 		suite.DB.Model(&models.Idea{}).Where("id = ?", idea.ID).Count(&count)
 		suite.Equal(int64(1), count)
 	})
 
-	suite.Run("Admin cannot delete idea", func() {
+	suite.Run("Admin can delete idea", func() {
 		idea := suite.createTestIdea(author, coffeeShop, category)
 		req := TestRequest{
 			method: http.MethodDelete,
@@ -289,10 +293,10 @@ func (suite *IdeaIntegrationTestSuite) TestDeleteIdea() {
 			token:  adminToken,
 		}
 		w := suite.MakeRequest(req)
-		suite.Equal(http.StatusUnauthorized, w.Code)
+		suite.Equal(http.StatusNoContent, w.Code)
 		var count int64
 		suite.DB.Model(&models.Idea{}).Where("id = ?", idea.ID).Count(&count)
-		suite.Equal(int64(1), count)
+		suite.Equal(int64(0), count)
 	})
 
 	suite.Run("Unauthorized cannot delete", func() {

@@ -39,12 +39,11 @@ func (suite *RewardTypeIntegrationTestSuite) TestCreateRewardType() {
 			needCheckResp:  true,
 			setup: func() (string, dto.CreateRewardTypeRequest) {
 				admin := models.User{
-					Name:   "admin name",
-					Phone:  "7777",
-					RoleID: suite.AdminRoleID,
+					Name:  "admin name",
+					Phone: "7777",
 				}
 				token := suite.RegisterUserAndGetToken(&admin)
-				shop, err := suite.CoffeeShopRepo.CreateCoffeeShop(&models.CoffeeShop{
+				shop, err := suite.CoffeeShopRepo.CreateCoffeeShop(suite.Ctx, &models.CoffeeShop{
 					Name:      "test coffee shop",
 					CreatorID: admin.ID,
 				})
@@ -54,6 +53,7 @@ func (suite *RewardTypeIntegrationTestSuite) TestCreateRewardType() {
 				err = suite.DB.Create(&models.WorkerCoffeeShop{
 					WorkerID:     &admin.ID,
 					CoffeeShopID: &shop.ID,
+					RoleID:       &suite.AdminRoleID,
 				}).Error
 				suite.Require().NoError(err)
 
@@ -70,12 +70,11 @@ func (suite *RewardTypeIntegrationTestSuite) TestCreateRewardType() {
 			needCheckResp:  false,
 			setup: func() (string, dto.CreateRewardTypeRequest) {
 				user := models.User{
-					Name:   "not admin name",
-					Phone:  "1241151",
-					RoleID: suite.UserRoleID,
+					Name:  "not admin name",
+					Phone: "1241151",
 				}
 				token := suite.RegisterUserAndGetToken(&user)
-				shop, err := suite.CoffeeShopRepo.CreateCoffeeShop(&models.CoffeeShop{
+				shop, err := suite.CoffeeShopRepo.CreateCoffeeShop(suite.Ctx, &models.CoffeeShop{
 					Name:      "test coffee shop",
 					CreatorID: user.ID,
 				})

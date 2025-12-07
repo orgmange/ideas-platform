@@ -41,7 +41,7 @@ func (h UserHandler) GetAllUsers(c *gin.Context) {
 
 	page, _ := strconv.Atoi(pageRaw)
 	limit, _ := strconv.Atoi(limitRaw)
-	resp, err := h.uc.GetAllUsers(actorID, page, limit)
+	resp, err := h.uc.GetAllUsers(c.Request.Context(), actorID, page, limit)
 	if err != nil {
 		HandleAppErrors(err, h.logger, c)
 	}
@@ -68,7 +68,7 @@ func (h UserHandler) GetUser(c *gin.Context) {
 	if !ok {
 		return
 	}
-	user, err := h.uc.GetUser(actorID, userID)
+	user, err := h.uc.GetUser(c.Request.Context(), actorID, userID)
 	if err != nil {
 		HandleAppErrors(err, h.logger, c)
 		return
@@ -105,7 +105,7 @@ func (h UserHandler) UpdateUser(c *gin.Context) {
 	if !ok {
 		return
 	}
-	err = h.uc.UpdateUser(actorID, userID, &req)
+	err = h.uc.UpdateUser(c.Request.Context(), actorID, userID, &req)
 	if err != nil {
 		HandleAppErrors(err, h.logger, c)
 		return
@@ -134,7 +134,7 @@ func (h UserHandler) DeleteUser(c *gin.Context) {
 	if !ok {
 		return
 	}
-	err := h.uc.DeleteUser(actorID, uuid)
+	err := h.uc.DeleteUser(c.Request.Context(), actorID, uuid)
 	if err != nil {
 		HandleAppErrors(err, h.logger, c)
 		return
@@ -157,7 +157,7 @@ func (h UserHandler) GetCurrentAuthentificatedUser(c *gin.Context) {
 	if !ok {
 		return
 	}
-	userResp, err := h.uc.GetUser(actorID, actorID)
+	userResp, err := h.uc.GetUser(c.Request.Context(), actorID, actorID)
 	if err != nil {
 		HandleAppErrors(err, h.logger, c)
 		return

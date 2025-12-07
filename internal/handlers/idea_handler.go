@@ -44,7 +44,7 @@ func (h *IdeaHandler) CreateIdea(c *gin.Context) {
 	if !ok {
 		return
 	}
-	resp, err := h.uc.CreateIdea(userID, &req)
+	resp, err := h.uc.CreateIdea(c.Request.Context(), userID, &req)
 	if err != nil {
 		HandleAppErrors(err, h.logger, c)
 		return
@@ -84,7 +84,7 @@ func (h *IdeaHandler) GetIdeasFromShop(c *gin.Context) {
 		Sort:  sort,
 	}
 
-	resp, err := h.uc.GetAllIdeasByShop(shopID, params)
+	resp, err := h.uc.GetAllIdeasByShop(c.Request.Context(), shopID, params)
 	if err != nil {
 		HandleAppErrors(err, h.logger, c)
 		return
@@ -116,7 +116,7 @@ func (h *IdeaHandler) GetIdeasFromUser(c *gin.Context) {
 		return
 	}
 
-	resp, err := h.uc.GetAllIdeasByUser(userID, req)
+	resp, err := h.uc.GetAllIdeasByUser(c.Request.Context(), userID, req)
 	if err != nil {
 		HandleAppErrors(err, h.logger, c)
 		return
@@ -140,7 +140,7 @@ func (h *IdeaHandler) GetIdea(c *gin.Context) {
 	if !ok {
 		return
 	}
-	idea, err := h.uc.GetIdea(uuid)
+	idea, err := h.uc.GetIdea(c.Request.Context(), uuid)
 	if err != nil {
 		HandleAppErrors(err, h.logger, c)
 		return
@@ -176,7 +176,7 @@ func (h *IdeaHandler) UpdateIdea(c *gin.Context) {
 	if !ok {
 		return
 	}
-	err := h.uc.UpdateIdea(userID, uuid, &req)
+	err := h.uc.UpdateIdea(c.Request.Context(), userID, uuid, &req)
 	if err != nil {
 		HandleAppErrors(err, h.logger, c)
 		return
@@ -205,7 +205,7 @@ func (h *IdeaHandler) DeleteIdea(c *gin.Context) {
 	if !ok {
 		return
 	}
-	err := h.uc.DeleteIdea(userID, uuid)
+	err := h.uc.DeleteIdea(c.Request.Context(), userID, uuid)
 	if err != nil {
 		HandleAppErrors(err, h.logger, c)
 		return

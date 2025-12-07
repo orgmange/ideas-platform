@@ -27,6 +27,7 @@ type IdeaResponse struct {
 	Title        string     `json:"title"`
 	Description  string     `json:"description"`
 	ImageURL     *string    `json:"image_url"`
+	Likes        int        `json:"likes"`
 }
 
 type GetIdeasRequest struct {

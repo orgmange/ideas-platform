@@ -1,6 +1,7 @@
 package usecase
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -38,7 +39,7 @@ func NewAuthUsecase(rep repository.AuthRepository, jwtSecret string, authCfg *co
 }
 
 // GetOTP implements AuthUsecase.
-func (a *AuthUsecaseImpl) GetOTP(phone string) error {
+func (a *AuthUsecaseImpl) GetOTP(ctx context.Context, phone string) error {
 	logger := a.logger.With(
 		"method", "GetOTP",
 		"phone", phone,
@@ -46,7 +47,7 @@ func (a *AuthUsecaseImpl) GetOTP(phone string) error {
 
 	logger.Debug("starting OTP generation")
 
-	savedOTP, err := a.rep.GetOTP(phone)
+	savedOTP, err := a.rep.GetOTP(ctx, phone)
 	var errNotFound *apperrors.ErrNotFound
 	if err != nil && !errors.As(err, &errNotFound) {
 		logger.Error("failed to get OTP from repository", "error", err.Error())
@@ -80,7 +81,7 @@ func (a *AuthUsecaseImpl) GetOTP(phone string) error {
 		return err
 	}
 
-	err = a.saveOTP(savedOTP, hashedCode, phone)
+	err = a.saveOTP(ctx, savedOTP, hashedCode, phone)
 	if err != nil {
 		logger.Error("failed to save OTP", "error", err.Error())
 		return err
@@ -108,18 +109,18 @@ func (*AuthUsecaseImpl) checkRateLimit(savedOTP *models.OTP) error {
 	return nil
 }
 
-func (a *AuthUsecaseImpl) saveOTP(savedOTP *models.OTP, hashedCode string, phone string) error {
+func (a *AuthUsecaseImpl) saveOTP(ctx context.Context, savedOTP *models.OTP, hashedCode string, phone string) error {
 	if savedOTP != nil {
 		savedOTP.ExpiresAt = time.Now().Add(a.authCfg.OTPConfig.ExpiresAtTimer)
 		savedOTP.AttemptsLeft = a.authCfg.OTPConfig.AttemptsLeft
 		savedOTP.CodeHash = hashedCode
 
-		err := a.rep.UpdateOTP(savedOTP)
+		err := a.rep.UpdateOTP(ctx, savedOTP)
 		if err != nil {
 			return err
 		}
 	} else {
-		err := a.createOTP(phone, hashedCode)
+		err := a.createOTP(ctx, phone, hashedCode)
 		if err != nil {
 			return err
 		}
@@ -143,7 +144,7 @@ func (a *AuthUsecaseImpl) updateResendCount(savedOTP *models.OTP) {
 }
 
 // VerifyOTP implements AuthUsecase.
-func (a *AuthUsecaseImpl) VerifyOTP(req *dto.VerifyOTPRequest) (*dto.AuthResponse, error) {
+func (a *AuthUsecaseImpl) VerifyOTP(ctx context.Context, req *dto.VerifyOTPRequest) (*dto.AuthResponse, error) {
 	logger := a.logger.With(
 		"method", "GetOTP",
 		"phone", req.Phone,
@@ -151,7 +152,7 @@ func (a *AuthUsecaseImpl) VerifyOTP(req *dto.VerifyOTPRequest) (*dto.AuthRespons
 
 	logger.Debug("Starting virify OTP")
 
-	savedOTP, err := a.rep.GetOTP(req.Phone)
+	savedOTP, err := a.rep.GetOTP(ctx, req.Phone)
 	if err != nil {
 		var errNotFound *apperrors.ErrNotFound
 		if errors.As(err, &errNotFound) {
@@ -169,16 +170,16 @@ func (a *AuthUsecaseImpl) VerifyOTP(req *dto.VerifyOTPRequest) (*dto.AuthRespons
 	err = bcrypt.CompareHashAndPassword([]byte(savedOTP.CodeHash), []byte(req.OTP))
 	if err != nil {
 		logger.Info("sended OTP code not match with saved")
-		a.rep.UpdateOTP(savedOTP)
+		a.rep.UpdateOTP(ctx, savedOTP)
 		return nil, apperrors.NewErrUnauthorized("invalid credentials")
 	}
 
-	user, err := a.rep.GetUserByPhone(req.Phone)
+	user, err := a.rep.GetUserByPhone(ctx, req.Phone)
 	if err != nil {
 		var errNotFound *apperrors.ErrNotFound
 		if errors.As(err, &errNotFound) {
 			logger.Info("user with this phone not found, creating")
-			user, err = a.createUser(req)
+			user, err = a.createUser(ctx, req)
 			if err != nil {
 				return nil, err
 			}
@@ -187,13 +188,13 @@ func (a *AuthUsecaseImpl) VerifyOTP(req *dto.VerifyOTPRequest) (*dto.AuthRespons
 			return nil, err
 		}
 	}
-	err = a.rep.DeleteOTP(req.Phone)
+	err = a.rep.DeleteOTP(ctx, req.Phone)
 	if err != nil {
 		logger.Error("failed to delete OTP", "error", err.Error())
 		return nil, err
 	}
 
-	return a.makeAuthResponse(user, "")
+	return a.makeAuthResponse(ctx, user, "")
 }
 
 func generateCode() (string, error) {
@@ -221,7 +222,7 @@ func hashCode(code string) (string, error) {
 	return string(hash), err
 }
 
-func (a *AuthUsecaseImpl) createUser(req *dto.VerifyOTPRequest) (*models.User, error) {
+func (a *AuthUsecaseImpl) createUser(ctx context.Context, req *dto.VerifyOTPRequest) (*models.User, error) {
 	logger := a.logger.With(
 		"method", "createUser",
 		"phone", req.Phone,
@@ -241,7 +242,7 @@ func (a *AuthUsecaseImpl) createUser(req *dto.VerifyOTPRequest) (*models.User, e
 		Phone: req.Phone,
 		Name:  req.Name,
 	}
-	savedUser, err := a.rep.CreateUser(user)
+	savedUser, err := a.rep.CreateUser(ctx, user)
 	if err != nil {
 		logger.Error("failed create user", "error", err.Error())
 		return nil, err
@@ -251,7 +252,7 @@ func (a *AuthUsecaseImpl) createUser(req *dto.VerifyOTPRequest) (*models.User, e
 	return savedUser, nil
 }
 
-func (a *AuthUsecaseImpl) createOTP(phone, hashedCode string) error {
+func (a *AuthUsecaseImpl) createOTP(ctx context.Context, phone, hashedCode string) error {
 	otp := models.OTP{
 		Phone:         phone,
 		CodeHash:      hashedCode,
@@ -261,7 +262,7 @@ func (a *AuthUsecaseImpl) createOTP(phone, hashedCode string) error {
 		ResendCount:   0,
 		CreatedAt:     time.Now(),
 	}
-	err := a.rep.CreateOTP(&otp)
+	err := a.rep.CreateOTP(ctx, &otp)
 	if err != nil {
 		return err
 	}
@@ -269,31 +270,31 @@ func (a *AuthUsecaseImpl) createOTP(phone, hashedCode string) error {
 }
 
 // Logout implements AuthUsecase.
-func (a *AuthUsecaseImpl) Logout(tokenString string) error {
+func (a *AuthUsecaseImpl) Logout(ctx context.Context, tokenString string) error {
 	hashedToken := hashToken(tokenString)
-	return a.rep.DeleteRefreshToken(hashedToken)
+	return a.rep.DeleteRefreshToken(ctx, hashedToken)
 }
 
-func (a *AuthUsecaseImpl) LogoutEverywhere(userID uuid.UUID) error {
-	return a.rep.DeleteRefreshTokensByUserID(userID)
+func (a *AuthUsecaseImpl) LogoutEverywhere(ctx context.Context, userID uuid.UUID) error {
+	return a.rep.DeleteRefreshTokensByUserID(ctx, userID)
 }
 
-func (a *AuthUsecaseImpl) Refresh(oldTokenString string) (*dto.AuthResponse, error) {
-	oldToken, err := a.validateAndGetRefreshToken(oldTokenString)
+func (a *AuthUsecaseImpl) Refresh(ctx context.Context, oldTokenString string) (*dto.AuthResponse, error) {
+	oldToken, err := a.validateAndGetRefreshToken(ctx, oldTokenString)
 	if err != nil {
 		return nil, err
 	}
 
 	if oldToken.User == nil {
 		a.logger.Warn("refresh token exists but user not found", "token_hash", oldTokenString)
-		_ = a.rep.DeleteRefreshToken(oldTokenString)
+		_ = a.rep.DeleteRefreshToken(ctx, oldTokenString)
 		return nil, apperrors.NewErrUnauthorized("user not found")
 	}
 
-	return a.makeAuthResponse(oldToken.User, oldToken.RefreshToken)
+	return a.makeAuthResponse(ctx, oldToken.User, oldToken.RefreshToken)
 }
 
-func (a *AuthUsecaseImpl) makeAuthResponse(user *models.User, oldToken string) (*dto.AuthResponse, error) {
+func (a *AuthUsecaseImpl) makeAuthResponse(ctx context.Context, user *models.User, oldToken string) (*dto.AuthResponse, error) {
 	logger := a.logger.With("method", "makeAuthResponse", "userID", user.ID.String())
 
 	logger.Debug("starting make auth response")
@@ -303,7 +304,7 @@ func (a *AuthUsecaseImpl) makeAuthResponse(user *models.User, oldToken string) (
 		return nil, err
 	}
 
-	refreshToken, err := a.createRefreshToken(user.ID, oldToken)
+	refreshToken, err := a.createRefreshToken(ctx, user.ID, oldToken)
 	if err != nil {
 		logger.Error("failed to create refresh token token", "error", err.Error())
 		return nil, err
@@ -315,7 +316,7 @@ func (a *AuthUsecaseImpl) makeAuthResponse(user *models.User, oldToken string) (
 	}, nil
 }
 
-func (a *AuthUsecaseImpl) createRefreshToken(userID uuid.UUID, oldTokenString string) (*string, error) {
+func (a *AuthUsecaseImpl) createRefreshToken(ctx context.Context, userID uuid.UUID, oldTokenString string) (*string, error) {
 	logger := a.logger.With(
 		"method", "createRefreshToken",
 		"userID", userID.String(),
@@ -324,7 +325,7 @@ func (a *AuthUsecaseImpl) createRefreshToken(userID uuid.UUID, oldTokenString st
 	logger.Debug("starting create refresh token")
 	if oldTokenString != "" {
 		var errNotFound *apperrors.ErrNotFound
-		err := a.rep.DeleteRefreshToken(oldTokenString)
+		err := a.rep.DeleteRefreshToken(ctx, oldTokenString)
 		if err != nil && !errors.As(err, &errNotFound) {
 			logger.Error("failed to delete old token", "error", err.Error())
 			return nil, err
@@ -337,7 +338,7 @@ func (a *AuthUsecaseImpl) createRefreshToken(userID uuid.UUID, oldTokenString st
 		return nil, err
 	}
 	hashedToken := hashToken(newTokenString)
-	err = a.rep.CreateRefreshToken(&models.UserRefreshToken{
+	err = a.rep.CreateRefreshToken(ctx, &models.UserRefreshToken{
 		UserID:       userID,
 		RefreshToken: hashedToken,
 		ExpiresAt:    time.Now().Add(a.authCfg.JWTConfig.RefreshTokenTimer),
@@ -350,7 +351,7 @@ func (a *AuthUsecaseImpl) createRefreshToken(userID uuid.UUID, oldTokenString st
 	return &newTokenString, nil
 }
 
-func (a *AuthUsecaseImpl) ValidateJWTToken(tokenString string) (*dto.JWTClaims, error) {
+func (a *AuthUsecaseImpl) ValidateJWTToken(ctx context.Context, tokenString string) (*dto.JWTClaims, error) {
 	logger := a.logger.With(
 		"method", "ValidateJWTToken",
 	)
@@ -373,7 +374,7 @@ func (a *AuthUsecaseImpl) ValidateJWTToken(tokenString string) (*dto.JWTClaims, 
 	return &claims, nil
 }
 
-func (a *AuthUsecaseImpl) validateAndGetRefreshToken(token string) (*models.UserRefreshToken, error) {
+func (a *AuthUsecaseImpl) validateAndGetRefreshToken(ctx context.Context, token string) (*models.UserRefreshToken, error) {
 	logger := a.logger.With(
 		"method", "validateAndGetRefreshToken",
 		"token", token,
@@ -381,7 +382,7 @@ func (a *AuthUsecaseImpl) validateAndGetRefreshToken(token string) (*models.User
 
 	logger.Debug("starting validate and refresh token")
 	hashedToken := hashToken(token)
-	savedToken, err := a.rep.GetRefreshToken(hashedToken)
+	savedToken, err := a.rep.GetRefreshToken(ctx, hashedToken)
 	if err != nil {
 		var errNotFound *apperrors.ErrNotFound
 		if errors.As(err, &errNotFound) {

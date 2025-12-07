@@ -32,7 +32,7 @@ func NewAuthHandler(uc usecase.AuthUsecase, logger *slog.Logger) *AuthHandler {
 // @Router /auth/{phone} [get]
 func (h *AuthHandler) GetOTP(c *gin.Context) {
 	phone := c.Param("phone")
-	err := h.uc.GetOTP(phone)
+	err := h.uc.GetOTP(c.Request.Context(), phone)
 	if err != nil {
 		HandleAppErrors(err, h.logger, c)
 		return
@@ -60,7 +60,7 @@ func (h *AuthHandler) VerifyOTP(c *gin.Context) {
 		return
 	}
 
-	authResp, err := h.uc.VerifyOTP(&req)
+	authResp, err := h.uc.VerifyOTP(c.Request.Context(), &req)
 	if err != nil {
 		HandleAppErrors(err, h.logger, c)
 		return
@@ -88,7 +88,7 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 		return
 	}
 
-	authResp, err := h.uc.Refresh(refreshReq.RefreshToken)
+	authResp, err := h.uc.Refresh(c.Request.Context(), refreshReq.RefreshToken)
 	if err != nil {
 		HandleAppErrors(err, h.logger, c)
 		return
@@ -117,7 +117,7 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 		return
 	}
 
-	err = h.uc.Logout(logoutReq.RefreshToken)
+	err = h.uc.Logout(c.Request.Context(), logoutReq.RefreshToken)
 	if err != nil {
 		HandleAppErrors(err, h.logger, c)
 		return
@@ -140,7 +140,7 @@ func (h *AuthHandler) LogoutEverywhere(c *gin.Context) {
 	if !ok {
 		return
 	}
-	err := h.uc.LogoutEverywhere(userID)
+	err := h.uc.LogoutEverywhere(c.Request.Context(), userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Message: "internal server error"})
 		return

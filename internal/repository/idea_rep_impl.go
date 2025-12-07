@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"strings"
 
 	apperrors "github.com/GeorgiiMalishev/ideas-platform/internal/app_errors"
@@ -18,20 +19,20 @@ func NewIdeaRepository(db *gorm.DB) IdeaRepository {
 	return &ideaRepository{db}
 }
 
-func (r *ideaRepository) CreateIdea(idea *models.Idea) (*models.Idea, error) {
-	if err := r.db.Create(idea).Error; err != nil {
+func (r *ideaRepository) CreateIdea(ctx context.Context, idea *models.Idea) (*models.Idea, error) {
+	if err := r.db.WithContext(ctx).Create(idea).Error; err != nil {
 		return nil, err
 	}
 	// Reload the idea to get all associations
-	if err := r.db.Preload("CoffeeShop").First(idea, idea.ID).Error; err != nil {
+	if err := r.db.WithContext(ctx).Preload("CoffeeShop").First(idea, idea.ID).Error; err != nil {
 		return nil, err
 	}
 	return idea, nil
 }
 
-func (r *ideaRepository) GetIdea(ideaID uuid.UUID) (*models.Idea, error) {
+func (r *ideaRepository) GetIdea(ctx context.Context, ideaID uuid.UUID) (*models.Idea, error) {
 	var idea models.Idea
-	if err := r.db.First(&idea, "id = ?", ideaID).Error; err != nil {
+	if err := r.db.WithContext(ctx).First(&idea, "id = ?", ideaID).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, apperrors.NewErrNotFound("idea", ideaID.String())
 		}
@@ -40,9 +41,9 @@ func (r *ideaRepository) GetIdea(ideaID uuid.UUID) (*models.Idea, error) {
 	return &idea, nil
 }
 
-func (r *ideaRepository) GetAllIdeasByShop(shopID uuid.UUID, limit, offset int, sort string) ([]models.Idea, error) {
+func (r *ideaRepository) GetAllIdeasByShop(ctx context.Context, shopID uuid.UUID, limit, offset int, sort string) ([]models.Idea, error) {
 	var ideas []models.Idea
-	query := r.db.Model(&models.Idea{}).Where("coffee_shop_id = ?", shopID)
+	query := r.db.WithContext(ctx).Model(&models.Idea{}).Where("coffee_shop_id = ?", shopID)
 
 	query = applyIdeaSorting(query, sort)
 
@@ -50,9 +51,9 @@ func (r *ideaRepository) GetAllIdeasByShop(shopID uuid.UUID, limit, offset int, 
 	return ideas, err
 }
 
-func (r *ideaRepository) GetAllIdeasByUser(userID uuid.UUID, limit, offset int, sort string) ([]models.Idea, error) {
+func (r *ideaRepository) GetAllIdeasByUser(ctx context.Context, userID uuid.UUID, limit, offset int, sort string) ([]models.Idea, error) {
 	var ideas []models.Idea
-	query := r.db.Model(&models.Idea{}).Where("creator_id = ?", userID)
+	query := r.db.WithContext(ctx).Model(&models.Idea{}).Where("creator_id = ?", userID)
 
 	query = applyIdeaSorting(query, sort)
 
@@ -60,12 +61,12 @@ func (r *ideaRepository) GetAllIdeasByUser(userID uuid.UUID, limit, offset int, 
 	return ideas, err
 }
 
-func (r *ideaRepository) UpdateIdea(idea *models.Idea) error {
-	return r.db.Save(idea).Error
+func (r *ideaRepository) UpdateIdea(ctx context.Context, idea *models.Idea) error {
+	return r.db.WithContext(ctx).Save(idea).Error
 }
 
-func (r *ideaRepository) DeleteIdea(ideaID uuid.UUID) error {
-	result := r.db.Delete(&models.Idea{}, "id = ?", ideaID)
+func (r *ideaRepository) DeleteIdea(ctx context.Context, ideaID uuid.UUID) error {
+	result := r.db.WithContext(ctx).Delete(&models.Idea{}, "id = ?", ideaID)
 	if result.Error != nil {
 		return result.Error
 	}

@@ -50,7 +50,7 @@ func (h *WorkerCoffeeShopHandler) AddWorker(c *gin.Context) {
 		return
 	}
 
-	resp, err := h.uc.AddWorker(actorID, &req)
+	resp, err := h.uc.AddWorker(c.Request.Context(), actorID, &req)
 	if err != nil {
 		HandleAppErrors(err, h.logger, c)
 		return
@@ -84,7 +84,7 @@ func (h *WorkerCoffeeShopHandler) RemoveWorker(c *gin.Context) {
 		return
 	}
 
-	err := h.uc.RemoveWorker(actorID, workerShopRelationID)
+	err := h.uc.RemoveWorker(c.Request.Context(), actorID, workerShopRelationID)
 	if err != nil {
 		HandleAppErrors(err, h.logger, c)
 		return
@@ -126,7 +126,7 @@ func (h *WorkerCoffeeShopHandler) ListWorkersInShop(c *gin.Context) {
 	page, _ := strconv.Atoi(pageRaw)
 	limit, _ := strconv.Atoi(limitRaw)
 
-	resp, err := h.uc.ListWorkers(actorID, shopID, page, limit)
+	resp, err := h.uc.ListWorkers(c.Request.Context(), actorID, shopID, page, limit)
 	if err != nil {
 		HandleAppErrors(err, h.logger, c)
 		return
@@ -168,7 +168,7 @@ func (h *WorkerCoffeeShopHandler) ListCoffeeShopsForWorker(c *gin.Context) {
 	page, _ := strconv.Atoi(pageRaw)
 	limit, _ := strconv.Atoi(limitRaw)
 
-	resp, err := h.uc.ListShopsForWorker(actorID, workerID, page, limit)
+	resp, err := h.uc.ListShopsForWorker(c.Request.Context(), actorID, workerID, page, limit)
 	if err != nil {
 		HandleAppErrors(err, h.logger, c)
 		return

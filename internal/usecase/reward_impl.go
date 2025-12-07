@@ -1,6 +1,7 @@
 package usecase
 
 import (
+	"context"
 	"log/slog"
 	"time"
 
@@ -24,11 +25,11 @@ func NewRewardUsecase(rewardRepo repository.RewardRepository, ideaRepo repositor
 	}
 }
 
-func (u *RewardUsecaseImpl) GiveReward(actorID uuid.UUID, req *dto.GiveRewardRequest) (*dto.RewardResponse, error) {
+func (u *RewardUsecaseImpl) GiveReward(ctx context.Context, actorID uuid.UUID, req *dto.GiveRewardRequest) (*dto.RewardResponse, error) {
 	logger := u.logger.With("method", "GiveReward", "adminID", actorID.String(), "ideaID", req.IdeaID.String())
 	logger.Debug("starting to give a reward")
 
-	idea, err := u.ideaRepo.GetIdea(req.IdeaID)
+	idea, err := u.ideaRepo.GetIdea(ctx, req.IdeaID)
 	if err != nil {
 		logger.Error("failed to get idea", "error", err)
 		return nil, err
@@ -44,7 +45,7 @@ func (u *RewardUsecaseImpl) GiveReward(actorID uuid.UUID, req *dto.GiveRewardReq
 		GivenAt:      &now,
 	}
 
-	createdReward, err := u.rewardRepo.CreateReward(reward)
+	createdReward, err := u.rewardRepo.CreateReward(ctx, reward)
 	if err != nil {
 		logger.Error("failed to create reward in repository", "error", err)
 		return nil, err
@@ -54,17 +55,17 @@ func (u *RewardUsecaseImpl) GiveReward(actorID uuid.UUID, req *dto.GiveRewardReq
 	return toRewardResponse(createdReward), nil
 }
 
-func (u *RewardUsecaseImpl) RevokeReward(actorID, rewardID uuid.UUID) error {
+func (u *RewardUsecaseImpl) RevokeReward(ctx context.Context, actorID, rewardID uuid.UUID) error {
 	logger := u.logger.With("method", "RevokeReward", "adminID", actorID.String(), "rewardID", rewardID.String())
 	logger.Debug("starting to revoke a reward by admin")
 
 	// Check if reward exists before deleting
-	if _, err := u.rewardRepo.GetReward(rewardID); err != nil {
+	if _, err := u.rewardRepo.GetReward(ctx, rewardID); err != nil {
 		logger.Error("failed to get reward for deletion", "error", err)
 		return err
 	}
 
-	if err := u.rewardRepo.DeleteReward(rewardID); err != nil {
+	if err := u.rewardRepo.DeleteReward(ctx, rewardID); err != nil {
 		logger.Error("failed to delete reward from repository", "error", err)
 		return err
 	}
@@ -73,11 +74,11 @@ func (u *RewardUsecaseImpl) RevokeReward(actorID, rewardID uuid.UUID) error {
 	return nil
 }
 
-func (u *RewardUsecaseImpl) GetReward(rewardID uuid.UUID) (*dto.RewardResponse, error) {
+func (u *RewardUsecaseImpl) GetReward(ctx context.Context, rewardID uuid.UUID) (*dto.RewardResponse, error) {
 	logger := u.logger.With("method", "GetReward", "rewardID", rewardID.String())
 	logger.Debug("starting to get a reward")
 
-	reward, err := u.rewardRepo.GetReward(rewardID)
+	reward, err := u.rewardRepo.GetReward(ctx, rewardID)
 	if err != nil {
 		logger.Error("failed to get reward", "error", err)
 		return nil, err
@@ -87,7 +88,7 @@ func (u *RewardUsecaseImpl) GetReward(rewardID uuid.UUID) (*dto.RewardResponse, 
 	return toRewardResponse(reward), nil
 }
 
-func (u *RewardUsecaseImpl) GetRewardsForCoffeeShop(actorID, coffeeShopID uuid.UUID, page, limit int) ([]dto.RewardResponse, error) {
+func (u *RewardUsecaseImpl) GetRewardsForCoffeeShop(ctx context.Context, actorID, coffeeShopID uuid.UUID, page, limit int) ([]dto.RewardResponse, error) {
 	logger := u.logger.With("method", "GetRewardsForCoffeeShop", "actorID", actorID.String(), "coffeeShopID", coffeeShopID.String())
 	logger.Debug("starting to get rewards for coffee shop")
 
@@ -98,7 +99,7 @@ func (u *RewardUsecaseImpl) GetRewardsForCoffeeShop(actorID, coffeeShopID uuid.U
 		page = 0
 	}
 
-	rewards, err := u.rewardRepo.GetRewardsByCoffeeShopID(coffeeShopID, page*limit, limit)
+	rewards, err := u.rewardRepo.GetRewardsByCoffeeShopID(ctx, coffeeShopID, page*limit, limit)
 	if err != nil {
 		logger.Error("failed to get rewards for coffee shop", "error", err)
 		return nil, err
@@ -108,7 +109,7 @@ func (u *RewardUsecaseImpl) GetRewardsForCoffeeShop(actorID, coffeeShopID uuid.U
 	return toRewardResponses(rewards), nil
 }
 
-func (u *RewardUsecaseImpl) GetMyRewards(userID uuid.UUID, page, limit int) ([]dto.RewardResponse, error) {
+func (u *RewardUsecaseImpl) GetMyRewards(ctx context.Context, userID uuid.UUID, page, limit int) ([]dto.RewardResponse, error) {
 	logger := u.logger.With("method", "GetMyRewards", "userID", userID.String())
 	logger.Debug("starting to get my rewards")
 
@@ -119,7 +120,7 @@ func (u *RewardUsecaseImpl) GetMyRewards(userID uuid.UUID, page, limit int) ([]d
 		page = 0
 	}
 
-	rewards, err := u.rewardRepo.GetRewardsByUserID(userID, page*limit, limit)
+	rewards, err := u.rewardRepo.GetRewardsByUserID(ctx, userID, page*limit, limit)
 	if err != nil {
 		logger.Error("failed to get rewards for user", "error", err)
 		return nil, err
@@ -149,4 +150,3 @@ func toRewardResponses(rewards []models.Reward) []dto.RewardResponse {
 	}
 	return res
 }
-

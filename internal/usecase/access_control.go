@@ -1,6 +1,7 @@
 package usecase
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 
@@ -10,10 +11,10 @@ import (
 )
 
 // CheckShopAdminAccess verifies if a user is a worker in the shop with the 'admin' role.
-func CheckShopAdminAccess(logger *slog.Logger, workerShopRepo repository.WorkerCoffeeShopRepository, actorID, shopID uuid.UUID) error {
+func CheckShopAdminAccess(ctx context.Context, logger *slog.Logger, workerShopRepo repository.WorkerCoffeeShopRepository, actorID, shopID uuid.UUID) error {
 	l := logger.With("method", "CheckShopAdminAccess", "actorID", actorID, "shopID", shopID)
 
-	worker, err := workerShopRepo.GetByUserIDAndShopID(actorID, shopID)
+	worker, err := workerShopRepo.GetByUserIDAndShopID(ctx, actorID, shopID)
 	if err != nil {
 		var errNotFound *apperrors.ErrNotFound
 		if errors.As(err, &errNotFound) {
@@ -31,10 +32,10 @@ func CheckShopAdminAccess(logger *slog.Logger, workerShopRepo repository.WorkerC
 }
 
 // CheckAnyShopAdminAccess verifies if a user is an admin in at least one coffee shop.
-func CheckAnyShopAdminAccess(logger *slog.Logger, workerShopRepo repository.WorkerCoffeeShopRepository, actorID uuid.UUID) error {
+func CheckAnyShopAdminAccess(ctx context.Context, logger *slog.Logger, workerShopRepo repository.WorkerCoffeeShopRepository, actorID uuid.UUID) error {
 	l := logger.With("method", "CheckAnyShopAdminAccess", "actorID", actorID)
 
-	isAdmin, err := workerShopRepo.IsAdminInAnyShop(actorID)
+	isAdmin, err := workerShopRepo.IsAdminInAnyShop(ctx, actorID)
 	if err != nil {
 		return err
 	}

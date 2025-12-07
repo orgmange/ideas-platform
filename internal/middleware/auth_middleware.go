@@ -7,8 +7,10 @@ import (
 
 	"github.com/GeorgiiMalishev/ideas-platform/internal/dto"
 	"github.com/GeorgiiMalishev/ideas-platform/internal/handlers"
+	"github.com/GeorgiiMalishev/ideas-platform/internal/repository"
 	"github.com/GeorgiiMalishev/ideas-platform/internal/usecase"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 func AuthMiddleware(uc usecase.AuthUsecase, logger *slog.Logger) gin.HandlerFunc {
@@ -24,7 +26,7 @@ func AuthMiddleware(uc usecase.AuthUsecase, logger *slog.Logger) gin.HandlerFunc
 		}
 
 		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-		claims, err := uc.ValidateJWTToken(tokenString)
+		claims, err := uc.ValidateJWTToken(c.Request.Context(), tokenString)
 		if err != nil {
 			handlers.HandleAppErrors(err, logger, c)
 			c.Abort()
@@ -36,26 +38,27 @@ func AuthMiddleware(uc usecase.AuthUsecase, logger *slog.Logger) gin.HandlerFunc
 	}
 }
 
-func AdminFilter(logger *slog.Logger) gin.HandlerFunc {
+func AdminFilter(workerShopRepo repository.WorkerCoffeeShopRepository, logger *slog.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		roleAny, exist := c.Get("role")
+		userIDAny, exist := c.Get("user_id")
 		if !exist {
-			logger.Info("user not authorized", "path", c.Request.URL.Path)
-			c.JSON(http.StatusUnauthorized, dto.ErrorResponse{Message: "user not authorized"})
+			logger.Info("user_id not found in context for AdminFilter", "path", c.Request.URL.Path)
+			c.JSON(http.StatusUnauthorized, dto.ErrorResponse{Message: "user_id not found in context"})
 			c.Abort()
 			return
 		}
-		role, ok := roleAny.(string)
+
+		userID, ok := userIDAny.(uuid.UUID)
 		if !ok {
-			logger.Info("unexpected happens when parsing user role", "path", c.Request.URL.Path)
+			logger.Error("failed to parse user_id from context in AdminFilter", slog.Any("user_id_type", userIDAny), "path", c.Request.URL.Path)
 			c.JSON(http.StatusInternalServerError, dto.ErrorResponse{Message: "internal server error"})
 			c.Abort()
 			return
 		}
 
-		if role != "admin" {
-			logger.Info("user not admin", "path", c.Request.URL.Path)
-			c.JSON(http.StatusForbidden, dto.ErrorResponse{Message: "forbidden"})
+		err := usecase.CheckAnyShopAdminAccess(c.Request.Context(), logger, workerShopRepo, userID)
+		if err != nil {
+			handlers.HandleAppErrors(err, logger, c)
 			c.Abort()
 			return
 		}

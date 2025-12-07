@@ -1,6 +1,7 @@
 package usecase
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 
@@ -29,7 +30,7 @@ func NewUserUsecase(rep repository.UserRep,
 }
 
 // DeleteUser implements IUserUsecase.
-func (u *UserUsecaseImpl) DeleteUser(requesterID, ID uuid.UUID) error {
+func (u *UserUsecaseImpl) DeleteUser(ctx context.Context, requesterID, ID uuid.UUID) error {
 	logger := u.logger.With("method", "DeleteUser", "requesterID", requesterID.String(), "userID", ID.String())
 	logger.Debug("starting delete user")
 
@@ -37,7 +38,7 @@ func (u *UserUsecaseImpl) DeleteUser(requesterID, ID uuid.UUID) error {
 		logger.Info("access denied")
 		return apperrors.NewErrAccessDenied("forbidden")
 	}
-	err := u.rep.DeleteUser(ID)
+	err := u.rep.DeleteUser(ctx, ID)
 	if err != nil {
 		var errNotFound *apperrors.ErrNotFound
 		if errors.As(err, &errNotFound) {
@@ -53,11 +54,11 @@ func (u *UserUsecaseImpl) DeleteUser(requesterID, ID uuid.UUID) error {
 }
 
 // GetAllUsers implements IUserUsecase.
-func (u *UserUsecaseImpl) GetAllUsers(actorID uuid.UUID, page int, limit int) ([]dto.UserResponse, error) {
+func (u *UserUsecaseImpl) GetAllUsers(ctx context.Context, actorID uuid.UUID, page int, limit int) ([]dto.UserResponse, error) {
 	logger := u.logger.With("method", "GetAllUsers", "page", page, "limit", limit)
 	logger.Debug("starting get all users")
 
-	err := CheckAnyShopAdminAccess(logger, u.workerCsRep, actorID)
+	err := CheckAnyShopAdminAccess(ctx, logger, u.workerCsRep, actorID)
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +69,7 @@ func (u *UserUsecaseImpl) GetAllUsers(actorID uuid.UUID, page int, limit int) ([
 	if page < 0 {
 		page = 0
 	}
-	users, err := u.rep.GetAllUsers(limit, limit*page)
+	users, err := u.rep.GetAllUsers(ctx, limit, limit*page)
 	if err != nil {
 		logger.Error("failed to get all users", "error", err.Error())
 		return nil, err
@@ -79,17 +80,17 @@ func (u *UserUsecaseImpl) GetAllUsers(actorID uuid.UUID, page int, limit int) ([
 }
 
 // GetUser implements IUserUsecase.
-func (u *UserUsecaseImpl) GetUser(actorID, ID uuid.UUID) (*dto.UserResponse, error) {
+func (u *UserUsecaseImpl) GetUser(ctx context.Context, actorID, ID uuid.UUID) (*dto.UserResponse, error) {
 	logger := u.logger.With("method", "GetUser", "userID", ID.String())
 	logger.Debug("starting get user")
 
 	if !isOwner(actorID, ID) {
-		if err := CheckAnyShopAdminAccess(logger, u.workerCsRep, actorID); err != nil {
+		if err := CheckAnyShopAdminAccess(ctx, logger, u.workerCsRep, actorID); err != nil {
 			return nil, err
 		}
 	}
 
-	user, err := u.rep.GetUser(ID)
+	user, err := u.rep.GetUser(ctx, ID)
 	if err != nil {
 		var errNotFound *apperrors.ErrNotFound
 		if errors.As(err, &errNotFound) {
@@ -105,7 +106,7 @@ func (u *UserUsecaseImpl) GetUser(actorID, ID uuid.UUID) (*dto.UserResponse, err
 }
 
 // UpdateUser implements IUserUsecase.
-func (u *UserUsecaseImpl) UpdateUser(requesterID, ID uuid.UUID, req *dto.UpdateUserRequest) error {
+func (u *UserUsecaseImpl) UpdateUser(ctx context.Context, requesterID, ID uuid.UUID, req *dto.UpdateUserRequest) error {
 	logger := u.logger.With("method", "UpdateUser", "userID", ID.String())
 	logger.Debug("starting update user")
 
@@ -113,7 +114,7 @@ func (u *UserUsecaseImpl) UpdateUser(requesterID, ID uuid.UUID, req *dto.UpdateU
 		logger.Info("access denied")
 		return apperrors.NewErrAccessDenied("forbidden")
 	}
-	user, err := u.rep.GetUser(ID)
+	user, err := u.rep.GetUser(ctx, ID)
 	if err != nil {
 		var errNotFound *apperrors.ErrNotFound
 		if errors.As(err, &errNotFound) {
@@ -128,7 +129,7 @@ func (u *UserUsecaseImpl) UpdateUser(requesterID, ID uuid.UUID, req *dto.UpdateU
 		user.Name = req.Name
 	}
 
-	err = u.rep.UpdateUser(user)
+	err = u.rep.UpdateUser(ctx, user)
 	if err != nil {
 		logger.Error("failed to update user", "error", err.Error())
 		return err

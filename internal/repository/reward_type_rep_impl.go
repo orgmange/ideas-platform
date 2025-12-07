@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"errors"
 
 	apperrors "github.com/GeorgiiMalishev/ideas-platform/internal/app_errors"
@@ -19,8 +20,8 @@ func NewRewardTypeRepository(db *gorm.DB) RewardTypeRepository {
 	}
 }
 
-func (r RewardTypeRepositoryImpl) CreateReward(rewardType *models.RewardType) (*models.RewardType, error) {
-	err := r.db.Create(rewardType).Error
+func (r RewardTypeRepositoryImpl) CreateReward(ctx context.Context, rewardType *models.RewardType) (*models.RewardType, error) {
+	err := r.db.WithContext(ctx).Create(rewardType).Error
 	if err != nil {
 		return nil, err
 	}
@@ -28,8 +29,8 @@ func (r RewardTypeRepositoryImpl) CreateReward(rewardType *models.RewardType) (*
 	return rewardType, nil
 }
 
-func (r RewardTypeRepositoryImpl) DeleteReward(rewardTypeID uuid.UUID) error {
-	res := r.db.Delete(&models.RewardType{}, rewardTypeID)
+func (r RewardTypeRepositoryImpl) DeleteReward(ctx context.Context, rewardTypeID uuid.UUID) error {
+	res := r.db.WithContext(ctx).Delete(&models.RewardType{}, rewardTypeID)
 	if res.Error != nil {
 		return res.Error
 	}
@@ -41,9 +42,9 @@ func (r RewardTypeRepositoryImpl) DeleteReward(rewardTypeID uuid.UUID) error {
 	return nil
 }
 
-func (r RewardTypeRepositoryImpl) GetRewardType(rewardTypeID uuid.UUID) (*models.RewardType, error) {
+func (r RewardTypeRepositoryImpl) GetRewardType(ctx context.Context, rewardTypeID uuid.UUID) (*models.RewardType, error) {
 	var rewardType models.RewardType
-	err := r.db.Take(&rewardType, rewardTypeID).Error
+	err := r.db.WithContext(ctx).Take(&rewardType, rewardTypeID).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, apperrors.NewErrNotFound("rewardType", rewardTypeID.String())
@@ -54,9 +55,9 @@ func (r RewardTypeRepositoryImpl) GetRewardType(rewardTypeID uuid.UUID) (*models
 	return &rewardType, nil
 }
 
-func (r RewardTypeRepositoryImpl) GetRewardsTypeByCoffeeShopID(CoffeeShopID uuid.UUID, offset int, limit int) ([]models.RewardType, error) {
+func (r RewardTypeRepositoryImpl) GetRewardsTypeByCoffeeShopID(ctx context.Context, CoffeeShopID uuid.UUID, offset int, limit int) ([]models.RewardType, error) {
 	var rewardTypes []models.RewardType
-	err := r.db.Offset(offset).Limit(limit).Where("coffee_shop_id = ?", CoffeeShopID).Find(&rewardTypes).Error
+	err := r.db.WithContext(ctx).Offset(offset).Limit(limit).Where("coffee_shop_id = ?", CoffeeShopID).Find(&rewardTypes).Error
 	if err != nil {
 		return rewardTypes, err
 	}
@@ -64,6 +65,6 @@ func (r RewardTypeRepositoryImpl) GetRewardsTypeByCoffeeShopID(CoffeeShopID uuid
 	return rewardTypes, nil
 }
 
-func (r RewardTypeRepositoryImpl) UpdateReward(rewardType *models.RewardType) error {
-	return r.db.Save(rewardType).Error
+func (r RewardTypeRepositoryImpl) UpdateReward(ctx context.Context, rewardType *models.RewardType) error {
+	return r.db.WithContext(ctx).Save(rewardType).Error
 }

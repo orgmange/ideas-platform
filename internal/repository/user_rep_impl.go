@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"fmt"
 
 	apperrors "github.com/GeorgiiMalishev/ideas-platform/internal/app_errors"
@@ -17,8 +18,8 @@ func NewUserRepository(db *gorm.DB) UserRep {
 	return &UserRepImpl{db: db}
 }
 
-func (u *UserRepImpl) DeleteUser(ID uuid.UUID) error {
-	result := u.db.Model(&models.User{}).Where("id = ?", ID).Update("is_deleted", true)
+func (u *UserRepImpl) DeleteUser(ctx context.Context, ID uuid.UUID) error {
+	result := u.db.WithContext(ctx).Model(&models.User{}).Where("id = ?", ID).Update("is_deleted", true)
 	if result.Error != nil {
 		return result.Error
 	}
@@ -28,15 +29,15 @@ func (u *UserRepImpl) DeleteUser(ID uuid.UUID) error {
 	return nil
 }
 
-func (u *UserRepImpl) GetAllUsers(limit int, offset int) ([]models.User, error) {
+func (u *UserRepImpl) GetAllUsers(ctx context.Context, limit int, offset int) ([]models.User, error) {
 	var users []models.User
-	err := u.db.Where("is_deleted = ?", false).Limit(limit).Offset(offset).Find(&users).Error
+	err := u.db.WithContext(ctx).Where("is_deleted = ?", false).Limit(limit).Offset(offset).Find(&users).Error
 	return users, err
 }
 
-func (u *UserRepImpl) GetUser(ID uuid.UUID) (*models.User, error) {
+func (u *UserRepImpl) GetUser(ctx context.Context, ID uuid.UUID) (*models.User, error) {
 	var user models.User
-	err := u.db.Preload("Role").Where("id = ? AND is_deleted = ?", ID, false).First(&user).Error
+	err := u.db.WithContext(ctx).Where("id = ? AND is_deleted = ?", ID, false).First(&user).Error
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, apperrors.NewErrNotFound("user", ID.String())
@@ -46,16 +47,15 @@ func (u *UserRepImpl) GetUser(ID uuid.UUID) (*models.User, error) {
 	return &user, nil
 }
 
-func (u *UserRepImpl) UpdateUser(user *models.User) error {
-	return u.db.Save(user).Error
+func (u *UserRepImpl) UpdateUser(ctx context.Context, user *models.User) error {
+	return u.db.WithContext(ctx).Save(user).Error
 }
 
-func (u *UserRepImpl) IsUserExist(ID uuid.UUID) (bool, error) {
+func (u *UserRepImpl) IsUserExist(ctx context.Context, ID uuid.UUID) (bool, error) {
 	var count int64
-	err := u.db.Model(&models.User{}).Where("id = ?", ID).Count(&count).Error
+	err := u.db.WithContext(ctx).Model(&models.User{}).Where("id = ?", ID).Count(&count).Error
 	if err != nil {
 		return false, fmt.Errorf("failed to check user existence: %w", err)
 	}
 	return count > 0, nil
 }
-

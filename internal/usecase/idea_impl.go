@@ -1,6 +1,7 @@
 package usecase
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 
@@ -12,15 +13,22 @@ import (
 )
 
 type IdeaUsecaseImpl struct {
-	ideaRepo repository.IdeaRepository
-	logger   *slog.Logger
+	ideaRepo     repository.IdeaRepository
+	workerCsRepo repository.WorkerCoffeeShopRepository
+	likeRepo     repository.LikeRepository
+	logger       *slog.Logger
 }
 
-func NewIdeaUsecase(ideaRepo repository.IdeaRepository, logger *slog.Logger) IdeaUsecase {
-	return &IdeaUsecaseImpl{ideaRepo: ideaRepo, logger: logger}
+func NewIdeaUsecase(ideaRepo repository.IdeaRepository, workerCsRepo repository.WorkerCoffeeShopRepository, likeRepo repository.LikeRepository, logger *slog.Logger) IdeaUsecase {
+	return &IdeaUsecaseImpl{
+		ideaRepo:     ideaRepo,
+		workerCsRepo: workerCsRepo,
+		likeRepo:     likeRepo,
+		logger:       logger,
+	}
 }
 
-func (u *IdeaUsecaseImpl) CreateIdea(userID uuid.UUID, req *dto.CreateIdeaRequest) (*dto.IdeaResponse, error) {
+func (u *IdeaUsecaseImpl) CreateIdea(ctx context.Context, userID uuid.UUID, req *dto.CreateIdeaRequest) (*dto.IdeaResponse, error) {
 	logger := u.logger.With("method", "CreateIdea", "userID", userID.String())
 	logger.Debug("starting create idea")
 
@@ -33,21 +41,21 @@ func (u *IdeaUsecaseImpl) CreateIdea(userID uuid.UUID, req *dto.CreateIdeaReques
 		ImageURL:     req.ImageURL,
 	}
 
-	createdIdea, err := u.ideaRepo.CreateIdea(idea)
+	createdIdea, err := u.ideaRepo.CreateIdea(ctx, idea)
 	if err != nil {
 		logger.Error("failed to create idea", "error", err.Error())
 		return nil, err
 	}
 
 	logger.Info("idea created successfully", "ideaID", createdIdea.ID.String())
-	return toIdeaResponse(createdIdea), nil
+	return toIdeaResponse(createdIdea, 0), nil
 }
 
-func (u *IdeaUsecaseImpl) GetIdea(ideaID uuid.UUID) (*dto.IdeaResponse, error) {
+func (u *IdeaUsecaseImpl) GetIdea(ctx context.Context, ideaID uuid.UUID) (*dto.IdeaResponse, error) {
 	logger := u.logger.With("method", "GetIdea", "ideaID", ideaID.String())
 	logger.Debug("starting get idea")
 
-	idea, err := u.ideaRepo.GetIdea(ideaID)
+	idea, err := u.ideaRepo.GetIdea(ctx, ideaID)
 	if err != nil {
 		var errNotFound *apperrors.ErrNotFound
 		if errors.As(err, &errNotFound) {
@@ -58,11 +66,17 @@ func (u *IdeaUsecaseImpl) GetIdea(ideaID uuid.UUID) (*dto.IdeaResponse, error) {
 		return nil, err
 	}
 
+	likes, err := u.likeRepo.GetLikesCount(ctx, idea.ID)
+	if err != nil {
+		logger.Error("failed to get likes count", "error", err.Error())
+		return nil, err
+	}
+
 	logger.Info("idea fetched successfully")
-	return toIdeaResponse(idea), nil
+	return toIdeaResponse(idea, int(likes)), nil
 }
 
-func (u *IdeaUsecaseImpl) GetAllIdeasByShop(shopID uuid.UUID, params dto.GetIdeasRequest) ([]dto.IdeaResponse, error) {
+func (u *IdeaUsecaseImpl) GetAllIdeasByShop(ctx context.Context, shopID uuid.UUID, params dto.GetIdeasRequest) ([]dto.IdeaResponse, error) {
 	logger := u.logger.With("method", "GetAllIdeasByShop", "shopID", shopID.String(), "page", params.Page, "limit", params.Limit, "sort", params.Sort)
 	logger.Debug("starting get all ideas by shop")
 
@@ -73,17 +87,17 @@ func (u *IdeaUsecaseImpl) GetAllIdeasByShop(shopID uuid.UUID, params dto.GetIdea
 		params.Page = 0
 	}
 
-	ideas, err := u.ideaRepo.GetAllIdeasByShop(shopID, params.Limit, params.Page*params.Limit, params.Sort)
+	ideas, err := u.ideaRepo.GetAllIdeasByShop(ctx, shopID, params.Limit, params.Page*params.Limit, params.Sort)
 	if err != nil {
 		logger.Error("failed to get all ideas by shop", "error", err.Error())
 		return nil, err
 	}
 
 	logger.Info("ideas by shop fetched successfully", "count", len(ideas))
-	return toIdeaResponses(ideas), nil
+	return toIdeaResponses(ctx, ideas, u.likeRepo), nil
 }
 
-func (u *IdeaUsecaseImpl) GetAllIdeasByUser(userID uuid.UUID, params dto.GetIdeasRequest) ([]dto.IdeaResponse, error) {
+func (u *IdeaUsecaseImpl) GetAllIdeasByUser(ctx context.Context, userID uuid.UUID, params dto.GetIdeasRequest) ([]dto.IdeaResponse, error) {
 	logger := u.logger.With("method", "GetAllIdeasByUser", "userID", userID.String(), "page", params.Page, "limit", params.Limit, "sort", params.Sort)
 	logger.Debug("starting get all ideas by user")
 
@@ -94,21 +108,21 @@ func (u *IdeaUsecaseImpl) GetAllIdeasByUser(userID uuid.UUID, params dto.GetIdea
 		params.Page = 0
 	}
 
-	ideas, err := u.ideaRepo.GetAllIdeasByUser(userID, params.Limit, params.Page*params.Limit, params.Sort)
+	ideas, err := u.ideaRepo.GetAllIdeasByUser(ctx, userID, params.Limit, params.Page*params.Limit, params.Sort)
 	if err != nil {
 		logger.Error("failed to get all ideas by user", "error", err.Error())
 		return nil, err
 	}
 
 	logger.Info("ideas by user fetched successfully", "count", len(ideas))
-	return toIdeaResponses(ideas), nil
+	return toIdeaResponses(ctx, ideas, u.likeRepo), nil
 }
 
-func (u *IdeaUsecaseImpl) UpdateIdea(userID, ideaID uuid.UUID, req *dto.UpdateIdeaRequest) error {
+func (u *IdeaUsecaseImpl) UpdateIdea(ctx context.Context, userID, ideaID uuid.UUID, req *dto.UpdateIdeaRequest) error {
 	logger := u.logger.With("method", "UpdateIdea", "userID", userID.String(), "ideaID", ideaID.String())
 	logger.Debug("starting update idea")
 
-	idea, err := u.getIfCreator(userID, ideaID)
+	idea, err := u.getIfCreator(ctx, userID, ideaID)
 	if err != nil {
 		return err
 	}
@@ -129,7 +143,7 @@ func (u *IdeaUsecaseImpl) UpdateIdea(userID, ideaID uuid.UUID, req *dto.UpdateId
 		idea.ImageURL = req.ImageURL
 	}
 
-	err = u.ideaRepo.UpdateIdea(idea)
+	err = u.ideaRepo.UpdateIdea(ctx, idea)
 	if err != nil {
 		logger.Error("failed to update idea", "error", err.Error())
 		return err
@@ -139,22 +153,39 @@ func (u *IdeaUsecaseImpl) UpdateIdea(userID, ideaID uuid.UUID, req *dto.UpdateId
 	return nil
 }
 
-func (u *IdeaUsecaseImpl) DeleteIdea(userID, ideaID uuid.UUID) error {
+func (u *IdeaUsecaseImpl) DeleteIdea(ctx context.Context, userID, ideaID uuid.UUID) error {
 	logger := u.logger.With("method", "DeleteIdea", "userID", userID.String(), "ideaID", ideaID.String())
 	logger.Debug("starting delete idea")
 
-	_, err := u.getIfCreator(userID, ideaID)
-	if err != nil {
-		return err
-	}
-
-	err = u.ideaRepo.DeleteIdea(ideaID)
+	idea, err := u.ideaRepo.GetIdea(ctx, ideaID)
 	if err != nil {
 		var errNotFound *apperrors.ErrNotFound
 		if errors.As(err, &errNotFound) {
 			logger.Info("idea to delete not found")
 			return err
 		}
+		logger.Error("failed to get idea for deletion check", "error", err.Error())
+		return err
+	}
+
+	// Check if user is the creator
+	isCreator := idea.CreatorID != nil && userID == *idea.CreatorID
+
+	// If not the creator, check if they are an admin of the coffee shop
+	if !isCreator {
+		if idea.CoffeeShopID == nil {
+			logger.Info("access denied: idea has no coffee shop and user is not creator")
+			return apperrors.NewErrAccessDenied("access denied")
+		}
+		err := CheckShopAdminAccess(ctx, u.logger, u.workerCsRepo, userID, *idea.CoffeeShopID)
+		if err != nil {
+			logger.Info("access denied: user is not creator or shop admin")
+			return err
+		}
+	}
+
+	err = u.ideaRepo.DeleteIdea(ctx, ideaID)
+	if err != nil {
 		logger.Error("failed to delete idea", "error", err.Error())
 		return err
 	}
@@ -163,11 +194,11 @@ func (u *IdeaUsecaseImpl) DeleteIdea(userID, ideaID uuid.UUID) error {
 	return nil
 }
 
-func (u *IdeaUsecaseImpl) getIfCreator(userID, ideaID uuid.UUID) (*models.Idea, error) {
+func (u *IdeaUsecaseImpl) getIfCreator(ctx context.Context, userID, ideaID uuid.UUID) (*models.Idea, error) {
 	logger := u.logger.With("method", "getIfCreator", "userID", userID.String(), "ideaID", ideaID.String())
 	logger.Debug("checking if user is creator of idea")
 
-	idea, err := u.ideaRepo.GetIdea(ideaID)
+	idea, err := u.ideaRepo.GetIdea(ctx, ideaID)
 	if err != nil {
 		var errNotFound *apperrors.ErrNotFound
 		if errors.As(err, &errNotFound) {
@@ -187,7 +218,7 @@ func (u *IdeaUsecaseImpl) getIfCreator(userID, ideaID uuid.UUID) (*models.Idea, 
 	return idea, nil
 }
 
-func toIdeaResponse(idea *models.Idea) *dto.IdeaResponse {
+func toIdeaResponse(idea *models.Idea, likes int) *dto.IdeaResponse {
 	return &dto.IdeaResponse{
 		ID:           idea.ID,
 		CreatorID:    idea.CreatorID,
@@ -197,13 +228,22 @@ func toIdeaResponse(idea *models.Idea) *dto.IdeaResponse {
 		Title:        idea.Title,
 		Description:  idea.Description,
 		ImageURL:     idea.ImageURL,
+		Likes:        likes,
 	}
 }
 
-func toIdeaResponses(ideas []models.Idea) []dto.IdeaResponse {
+func toIdeaResponses(ctx context.Context, ideas []models.Idea, likeRepo repository.LikeRepository) []dto.IdeaResponse {
 	res := make([]dto.IdeaResponse, len(ideas))
 	for i, idea := range ideas {
-		res[i] = *toIdeaResponse(&idea)
+		likes, err := likeRepo.GetLikesCount(ctx, idea.ID)
+		if err != nil {
+			// In case of an error, we can log it and set likes to 0
+			// Or we can return the error, but that would complicate the calling functions
+			// For now, let's log and default to 0
+			// logger.Error("failed to get likes count for idea", "ideaID", idea.ID, "error", err)
+			likes = 0
+		}
+		res[i] = *toIdeaResponse(&idea, int(likes))
 	}
 	return res
 }

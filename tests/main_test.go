@@ -2,6 +2,7 @@ package tests
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -29,18 +30,20 @@ import (
 // BaseTestSuite is a base suite for integration tests
 type BaseTestSuite struct {
 	suite.Suite
-	DB             *gorm.DB
-	Router         *gin.Engine
-	cfg            *config.Config
-	AuthRepo       repository.AuthRepository
-	UserRepo       repository.UserRep
-	CoffeeShopRepo repository.CoffeeShopRep
-	IdeaRepo       repository.IdeaRepository
+	DB                   *gorm.DB
+	Router               *gin.Engine
+	cfg                  *config.Config
+	AuthRepo             repository.AuthRepository
+	UserRepo             repository.UserRep
+	CoffeeShopRepo       repository.CoffeeShopRep
+	IdeaRepo             repository.IdeaRepository
 	RewardRepo           repository.RewardRepository
 	RewardTypeRepo       repository.RewardTypeRepository
 	WorkerCoffeeShopRepo repository.WorkerCoffeeShopRepository
+	LikeRepo             repository.LikeRepository
 	UserRoleID           uuid.UUID
 	AdminRoleID          uuid.UUID
+	Ctx                  context.Context
 }
 
 // TestRequest is a helper struct for making requests
@@ -54,6 +57,7 @@ type TestRequest struct {
 
 // SetupSuite sets up the test suite
 func (suite *BaseTestSuite) SetupSuite() {
+	suite.Ctx = context.Background()
 	cfg, err := config.Load()
 	if err != nil {
 		suite.T().Fatalf("failed to load config: %v", err)
@@ -66,8 +70,8 @@ func (suite *BaseTestSuite) SetupSuite() {
 	suite.cfg.DB.User = "postgres"
 	suite.cfg.DB.Password = "postgres"
 
-	// Use a short JWT token timer for tests
-	suite.cfg.AuthConfig.JWTConfig.JWTTokenTimer = time.Second * 2
+	// Use a long JWT token timer for tests to avoid flakes
+	suite.cfg.AuthConfig.JWTConfig.JWTTokenTimer = time.Hour * 1
 
 	database, err := db.InitDB(suite.cfg)
 	if err != nil {
@@ -89,37 +93,6 @@ func (suite *BaseTestSuite) SetupSuite() {
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
-	// Repositories
-	suite.AuthRepo = repository.NewAuthRepository(suite.DB)
-	suite.UserRepo = repository.NewUserRepository(suite.DB)
-	suite.CoffeeShopRepo = repository.NewCoffeeShopRepository(suite.DB)
-	suite.IdeaRepo = repository.NewIdeaRepository(suite.DB)
-	suite.RewardRepo = repository.NewRewardRepository(suite.DB)
-	suite.RewardTypeRepo = repository.NewRewardTypeRepository(suite.DB)
-	suite.WorkerCoffeeShopRepo = repository.NewWorkerCoffeeShopRepository(suite.DB)
-
-	// Usecases
-	authUsecase := usecase.NewAuthUsecase(suite.AuthRepo, "test-secret", &suite.cfg.AuthConfig, logger)
-	userUsecase := usecase.NewUserUsecase(suite.UserRepo, logger)
-	csUscase := usecase.NewCoffeeShopUsecase(suite.CoffeeShopRepo, logger)
-	ideaUsecase := usecase.NewIdeaUsecase(suite.IdeaRepo, logger)
-	rewardUsecase := usecase.NewRewardUsecase(suite.RewardRepo, suite.IdeaRepo, logger)
-	rewardTypeUsecase := usecase.NewRewardTypeUsecase(suite.RewardTypeRepo, suite.CoffeeShopRepo, logger)
-	workerCoffeeShopUsecase := usecase.NewWorkerCoffeeShopUsecase(suite.WorkerCoffeeShopRepo, suite.CoffeeShopRepo, suite.UserRepo, logger)
-
-	// Handlers
-	authHandler := handlers.NewAuthHandler(authUsecase, logger)
-	userHandler := handlers.NewUserHandler(userUsecase, logger)
-	csHandler := handlers.NewCoffeeShopHandler(csUscase, logger)
-	ideaHandler := handlers.NewIdeaHandler(ideaUsecase, logger)
-	rewardHandler := handlers.NewRewardHandler(rewardUsecase, logger)
-	rewardTypeHandler := handlers.NewRewardTypeHandler(rewardTypeUsecase, logger)
-	workerCoffeeShopHandler := handlers.NewWorkerCoffeeShopHandler(workerCoffeeShopUsecase, logger)
-
-	// Router
-	appRouter := router.NewRouter(suite.cfg, userHandler, csHandler, authHandler, ideaHandler, rewardHandler, rewardTypeHandler, workerCoffeeShopHandler, authUsecase, logger)
-	suite.Router = appRouter.SetupRouter()
-
 	adminRole := models.Role{
 		Name: "admin",
 	}
@@ -131,6 +104,40 @@ func (suite *BaseTestSuite) SetupSuite() {
 	}
 	suite.DB.FirstOrCreate(&userRole, "name = ?", "user")
 	suite.UserRoleID = userRole.ID
+
+	// Repositories
+	suite.AuthRepo = repository.NewAuthRepository(suite.DB)
+	suite.UserRepo = repository.NewUserRepository(suite.DB)
+	suite.CoffeeShopRepo = repository.NewCoffeeShopRepository(suite.DB)
+	suite.IdeaRepo = repository.NewIdeaRepository(suite.DB)
+	suite.RewardRepo = repository.NewRewardRepository(suite.DB)
+	suite.RewardTypeRepo = repository.NewRewardTypeRepository(suite.DB)
+	suite.WorkerCoffeeShopRepo = repository.NewWorkerCoffeeShopRepository(suite.DB)
+	suite.LikeRepo = repository.NewLikeRepository(suite.DB)
+
+	// Usecases
+	authUsecase := usecase.NewAuthUsecase(suite.AuthRepo, "test-secret", &suite.cfg.AuthConfig, logger)
+	userUsecase := usecase.NewUserUsecase(suite.UserRepo, suite.WorkerCoffeeShopRepo, logger)
+	csUscase := usecase.NewCoffeeShopUsecase(suite.CoffeeShopRepo, suite.WorkerCoffeeShopRepo, suite.AdminRoleID, logger)
+	ideaUsecase := usecase.NewIdeaUsecase(suite.IdeaRepo, suite.WorkerCoffeeShopRepo, suite.LikeRepo, logger)
+	rewardUsecase := usecase.NewRewardUsecase(suite.RewardRepo, suite.IdeaRepo, logger)
+	rewardTypeUsecase := usecase.NewRewardTypeUsecase(suite.RewardTypeRepo, suite.CoffeeShopRepo, suite.WorkerCoffeeShopRepo, logger)
+	workerCoffeeShopUsecase := usecase.NewWorkerCoffeeShopUsecase(suite.WorkerCoffeeShopRepo, suite.CoffeeShopRepo, suite.UserRepo, logger)
+	likeUsecase := usecase.NewLikeUsecase(suite.LikeRepo, logger)
+
+	// Handlers
+	authHandler := handlers.NewAuthHandler(authUsecase, logger)
+	userHandler := handlers.NewUserHandler(userUsecase, logger)
+	csHandler := handlers.NewCoffeeShopHandler(csUscase, logger)
+	ideaHandler := handlers.NewIdeaHandler(ideaUsecase, logger)
+	rewardHandler := handlers.NewRewardHandler(rewardUsecase, logger)
+	rewardTypeHandler := handlers.NewRewardTypeHandler(rewardTypeUsecase, logger)
+	workerCoffeeShopHandler := handlers.NewWorkerCoffeeShopHandler(workerCoffeeShopUsecase, logger)
+	likeHandler := handlers.NewLikeHandler(likeUsecase, logger)
+
+	// Router
+	appRouter := router.NewRouter(suite.cfg, userHandler, csHandler, authHandler, ideaHandler, rewardHandler, rewardTypeHandler, workerCoffeeShopHandler, likeHandler, suite.WorkerCoffeeShopRepo, authUsecase, logger)
+	suite.Router = appRouter.SetupRouter()
 }
 
 // TearDownSuite tears down the test suite
@@ -194,7 +201,7 @@ func (suite *BaseTestSuite) GetAuthResponse(phone, otpCode, name string) dto.Aut
 	err := suite.DB.First(&user, "phone = ?", phone).Error
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			createdUser, errCreate := suite.AuthRepo.CreateUser(&models.User{Name: name, Phone: phone, RoleID: suite.UserRoleID})
+			createdUser, errCreate := suite.AuthRepo.CreateUser(suite.Ctx, &models.User{Name: name, Phone: phone})
 			suite.Require().NoError(errCreate)
 			user = *createdUser // Dereference to assign the value
 		}
@@ -253,7 +260,7 @@ func (suite *BaseTestSuite) RegisterUserAndGetToken(user *models.User) string {
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			// If user doesn't exist by phone, create them from the provided model using the repository.
-			_, errCreate := suite.AuthRepo.CreateUser(user)
+			_, errCreate := suite.AuthRepo.CreateUser(suite.Ctx, user)
 			suite.Require().NoError(errCreate)
 		} else {
 			// For any other DB error, fail the test.
@@ -268,10 +275,9 @@ func (suite *BaseTestSuite) RegisterUserAndGetToken(user *models.User) string {
 // CreateUser is a helper to create a user
 func (suite *BaseTestSuite) CreateUser(name, phone string) *models.User {
 	user := &models.User{
-		ID:     uuid.New(),
-		Name:   name,
-		Phone:  phone,
-		RoleID: suite.UserRoleID,
+		ID:    uuid.New(),
+		Name:  name,
+		Phone: phone,
 	}
 	err := suite.DB.Create(user).Error
 	suite.Require().NoError(err)

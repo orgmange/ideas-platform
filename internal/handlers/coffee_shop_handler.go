@@ -41,7 +41,7 @@ func (h *CoffeeShopHandler) CreateCoffeeShop(c *gin.Context) {
 	if !ok {
 		return
 	}
-	resp, err := h.coffeeShopUsecase.CreateCoffeeShop(userID, &req)
+	resp, err := h.coffeeShopUsecase.CreateCoffeeShop(c.Request.Context(), userID, &req)
 	if err != nil {
 		HandleAppErrors(err, h.logger, c)
 		return
@@ -67,7 +67,7 @@ func (h *CoffeeShopHandler) GetAllCoffeeShops(c *gin.Context) {
 	page, _ := strconv.Atoi(pageRaw)
 	limit, _ := strconv.Atoi(limitRaw)
 
-	resp, err := h.coffeeShopUsecase.GetAllCoffeeShops(page, limit)
+	resp, err := h.coffeeShopUsecase.GetAllCoffeeShops(c.Request.Context(), page, limit)
 	if err != nil {
 		HandleAppErrors(err, h.logger, c)
 		return
@@ -90,7 +90,7 @@ func (h *CoffeeShopHandler) GetCoffeeShop(c *gin.Context) {
 	if !ok {
 		return
 	}
-	shop, err := h.coffeeShopUsecase.GetCoffeeShop(uuid)
+	shop, err := h.coffeeShopUsecase.GetCoffeeShop(c.Request.Context(), uuid)
 	if err != nil {
 		HandleAppErrors(err, h.logger, c)
 		return
@@ -126,7 +126,7 @@ func (h *CoffeeShopHandler) UpdateCoffeeShop(c *gin.Context) {
 	if !ok {
 		return
 	}
-	err := h.coffeeShopUsecase.UpdateCoffeeShop(userID, uuid, &req)
+	err := h.coffeeShopUsecase.UpdateCoffeeShop(c.Request.Context(), userID, uuid, &req)
 	if err != nil {
 		HandleAppErrors(err, h.logger, c)
 		return
@@ -155,7 +155,7 @@ func (h *CoffeeShopHandler) DeleteCoffeeShop(c *gin.Context) {
 	if !ok {
 		return
 	}
-	err := h.coffeeShopUsecase.DeleteCoffeeShop(userID, uuid)
+	err := h.coffeeShopUsecase.DeleteCoffeeShop(c.Request.Context(), userID, uuid)
 	if err != nil {
 		HandleAppErrors(err, h.logger, c)
 		return

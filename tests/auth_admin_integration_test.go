@@ -26,9 +26,8 @@ func TestAuthAdminIntegrationTestSuite(t *testing.T) {
 
 func (suite *AuthAdminIntegrationTestSuite) TestHealthCheck() {
 	token := suite.RegisterUserAndGetToken(&models.User{
-		Phone:  "2685",
-		Name:   "adminuser",
-		RoleID: suite.AdminRoleID,
+		Phone: "2685",
+		Name:  "adminuser",
 	})
 	tests := []struct {
 		name           string

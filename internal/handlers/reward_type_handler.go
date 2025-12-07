@@ -27,7 +27,7 @@ func (h *RewardTypeHandler) GetRewardType(c *gin.Context) {
 	if !ok {
 		return
 	}
-	rewardType, err := h.uc.GetRewardType(rewardTypeID)
+	rewardType, err := h.uc.GetRewardType(c.Request.Context(), rewardTypeID)
 	if err != nil {
 		HandleAppErrors(err, h.logger, c)
 		return
@@ -47,7 +47,7 @@ func (h *RewardTypeHandler) GetRewardTypesByCoffeeShop(c *gin.Context) {
 	page, _ := strconv.Atoi(pageRaw)
 	limit, _ := strconv.Atoi(limitRaw)
 
-	rewardTypes, err := h.uc.GetRewardsTypesFromCoffeeShop(coffeeShopID, page, limit)
+	rewardTypes, err := h.uc.GetRewardsTypesFromCoffeeShop(c.Request.Context(), coffeeShopID, page, limit)
 	if err != nil {
 		HandleAppErrors(err, h.logger, c)
 		return
@@ -67,7 +67,7 @@ func (h *RewardTypeHandler) CreateRewardType(c *gin.Context) {
 	if !ok {
 		return
 	}
-	resp, err := h.uc.CreateRewardType(actorID, &req)
+	resp, err := h.uc.CreateRewardType(c.Request.Context(), actorID, &req)
 	if err != nil {
 		HandleAppErrors(err, h.logger, c)
 		return
@@ -91,7 +91,7 @@ func (h *RewardTypeHandler) UpdateRewardType(c *gin.Context) {
 	if !ok {
 		return
 	}
-	err = h.uc.UpdateRewardType(actorID, rewardTypeID, &req)
+	err = h.uc.UpdateRewardType(c.Request.Context(), actorID, rewardTypeID, &req)
 	if err != nil {
 		HandleAppErrors(err, h.logger, c)
 		return
@@ -108,7 +108,7 @@ func (h *RewardTypeHandler) DeleteRewardType(c *gin.Context) {
 	if !ok {
 		return
 	}
-	err := h.uc.DeleteRewardType(actorID, rewardTypeID)
+	err := h.uc.DeleteRewardType(c.Request.Context(), actorID, rewardTypeID)
 	if err != nil {
 		HandleAppErrors(err, h.logger, c)
 		return

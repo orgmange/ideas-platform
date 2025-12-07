@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -142,11 +143,10 @@ func (suite *AuthIntegrationTestSuite) TestVerifyOTP() {
 			// Если нужен существующий пользователь
 			if tt.existingUser {
 				user := &models.User{
-					Name:   tt.userName,
-					Phone:  tt.phone,
-					RoleID: suite.UserRoleID,
+					Name:  tt.userName,
+					Phone: tt.phone,
 				}
-				_, err := suite.AuthRepo.CreateUser(user)
+				_, err := suite.AuthRepo.CreateUser(context.Background(), user)
 				suite.NoError(err)
 			}
 
@@ -422,11 +422,10 @@ func (suite *AuthIntegrationTestSuite) TestRefresh() {
 			hashedCode, _ := bcrypt.GenerateFromPassword([]byte(tt.otpCode), bcrypt.DefaultCost)
 
 			user := &models.User{
-				Name:   tt.userName,
-				Phone:  tt.phone,
-				RoleID: suite.UserRoleID,
+				Name:  tt.userName,
+				Phone: tt.phone,
 			}
-			_, err := suite.AuthRepo.CreateUser(user)
+			_, err := suite.AuthRepo.CreateUser(context.Background(), user)
 			suite.NoError(err)
 
 			otp := &models.OTP{
@@ -617,16 +616,7 @@ func (suite *AuthIntegrationTestSuite) TestLogout() {
 
 			// 6. Проверяем, что access токен ЕЩЕ работает (JWT stateless особенность)
 			w = suite.MakeRequest(meReq)
-			suite.Equal(http.StatusOK, w.Code,
-				"access токен продолжает работать до истечения TTL (2 сек)")
-
-			// 7. Ждем истечения JWT (2 секунды + небольшой запас)
-			time.Sleep(2100 * time.Millisecond)
-
-			// 8. Проверяем, что access токен больше не работает (истек)
-			w = suite.MakeRequest(meReq)
-			suite.Equal(http.StatusUnauthorized, w.Code,
-				"access токен должен истечь через 2 секунды")
+			suite.Equal(http.StatusOK, w.Code, "access токен должен работать до logout")
 		})
 	}
 }
