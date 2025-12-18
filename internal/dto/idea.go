@@ -23,6 +23,7 @@ type IdeaResponse struct {
 	CoffeeShopID *uuid.UUID `json:"coffee_shop_id"`
 	CategoryID   *uuid.UUID `json:"category_id"`
 	StatusID     *uuid.UUID `json:"status_id"`
+	StatusName   string     `json:"status_name"`
 	Title        string     `json:"title"`
 	Description  string     `json:"description"`
 	ImageURL     *string    `json:"image_url"`

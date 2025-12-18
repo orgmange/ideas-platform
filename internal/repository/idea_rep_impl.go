@@ -24,7 +24,7 @@ func (r *ideaRepository) CreateIdea(ctx context.Context, idea *models.Idea) (*mo
 		return nil, err
 	}
 	// Reload the idea to get all associations
-	if err := r.db.WithContext(ctx).Preload("CoffeeShop").First(idea, idea.ID).Error; err != nil {
+	if err := r.db.WithContext(ctx).Preload("CoffeeShop").Preload("Status").First(idea, idea.ID).Error; err != nil {
 		return nil, err
 	}
 	return idea, nil
@@ -32,7 +32,7 @@ func (r *ideaRepository) CreateIdea(ctx context.Context, idea *models.Idea) (*mo
 
 func (r *ideaRepository) GetIdea(ctx context.Context, ideaID uuid.UUID) (*models.Idea, error) {
 	var idea models.Idea
-	if err := r.db.WithContext(ctx).First(&idea, "id = ?", ideaID).Error; err != nil {
+	if err := r.db.WithContext(ctx).Preload("Status").First(&idea, "id = ?", ideaID).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, apperrors.NewErrNotFound("idea", ideaID.String())
 		}
@@ -43,7 +43,7 @@ func (r *ideaRepository) GetIdea(ctx context.Context, ideaID uuid.UUID) (*models
 
 func (r *ideaRepository) GetAllIdeasByShop(ctx context.Context, shopID uuid.UUID, limit, offset int, sort string) ([]models.Idea, error) {
 	var ideas []models.Idea
-	query := r.db.WithContext(ctx).Model(&models.Idea{}).Where("coffee_shop_id = ?", shopID)
+	query := r.db.WithContext(ctx).Model(&models.Idea{}).Where("coffee_shop_id = ?", shopID).Preload("Status")
 
 	query = applyIdeaSorting(query, sort)
 
@@ -53,7 +53,7 @@ func (r *ideaRepository) GetAllIdeasByShop(ctx context.Context, shopID uuid.UUID
 
 func (r *ideaRepository) GetAllIdeasByUser(ctx context.Context, userID uuid.UUID, limit, offset int, sort string) ([]models.Idea, error) {
 	var ideas []models.Idea
-	query := r.db.WithContext(ctx).Model(&models.Idea{}).Where("creator_id = ?", userID)
+	query := r.db.WithContext(ctx).Model(&models.Idea{}).Where("creator_id = ?", userID).Preload("Status")
 
 	query = applyIdeaSorting(query, sort)
 

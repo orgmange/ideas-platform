@@ -66,6 +66,7 @@ type BaseTestSuite struct {
 	LikeRepo             repository.LikeRepository
 	CategoryRepo         repository.CategoryRepository
 	CommentRepo          repository.CommentRepository
+	IdeaStatusRepo       repository.IdeaStatusRepository // Added IdeaStatusRepo
 	ImageUsecase         usecase.ImageUsecase
 	UserRoleID           uuid.UUID
 	AdminRoleID          uuid.UUID
@@ -125,6 +126,7 @@ func (suite *BaseTestSuite) SetupSuite() {
 		&models.Idea{}, &models.IdeaLike{}, &models.IdeaComment{},
 		&models.Reward{}, &models.RewardType{}, &models.OTP{},
 		&models.UserRefreshToken{},
+		&models.IdeaStatus{}, // Added IdeaStatus
 	)
 	if err != nil {
 		suite.T().Fatalf("failed to auto-migrate database: %v", err)
@@ -155,13 +157,15 @@ func (suite *BaseTestSuite) SetupSuite() {
 	suite.LikeRepo = repository.NewLikeRepository(suite.DB)
 	suite.CategoryRepo = repository.NewCategoryRepository(suite.DB)
 	suite.CommentRepo = repository.NewCommentRepository(suite.DB)
+	suite.IdeaStatusRepo = repository.NewIdeaStatusRepository(suite.DB) // Added IdeaStatusRepo
 
 	// Usecases
 	suite.ImageUsecase = &MockImageUsecase{} // Initialize mock
 	authUsecase := usecase.NewAuthUsecase(suite.AuthRepo, suite.CoffeeShopRepo, suite.WorkerCoffeeShopRepo, suite.DB, "test-secret", &suite.cfg.AuthConfig, logger)
 	userUsecase := usecase.NewUserUsecase(suite.UserRepo, suite.WorkerCoffeeShopRepo, logger)
 	csUscase := usecase.NewCoffeeShopUsecase(suite.CoffeeShopRepo, suite.WorkerCoffeeShopRepo, suite.AdminRoleID, logger)
-	ideaUsecase := usecase.NewIdeaUsecase(suite.IdeaRepo, suite.WorkerCoffeeShopRepo, suite.LikeRepo, logger)
+	ideaStatusUsecase := usecase.NewIdeaStatusUsecase(suite.IdeaStatusRepo, logger) // Added IdeaStatusUsecase
+	ideaUsecase := usecase.NewIdeaUsecase(suite.IdeaRepo, suite.WorkerCoffeeShopRepo, suite.LikeRepo, suite.IdeaStatusRepo, logger) // Updated NewIdeaUsecase
 	rewardUsecase := usecase.NewRewardUsecase(suite.RewardRepo, suite.IdeaRepo, logger)
 	rewardTypeUsecase := usecase.NewRewardTypeUsecase(suite.RewardTypeRepo, suite.CoffeeShopRepo, suite.WorkerCoffeeShopRepo, logger)
 	workerCoffeeShopUsecase := usecase.NewWorkerCoffeeShopUsecase(suite.WorkerCoffeeShopRepo, suite.CoffeeShopRepo, suite.UserRepo, logger)
@@ -181,10 +185,11 @@ func (suite *BaseTestSuite) SetupSuite() {
 	likeHandler := handlers.NewLikeHandler(likeUsecase, logger)
 	categoryHandler := handlers.NewCategoryHandler(categoryUsecase, logger)
 	commentHandler := handlers.NewCommentHandler(commentUsecase, logger)
+	ideaStatusHandler := handlers.NewIdeaStatusHandler(ideaStatusUsecase, logger) // Added IdeaStatusHandler
 	imageHandler := handlers.NewImageHandler(suite.ImageUsecase, suite.cfg, logger)
 
 	// Router
-	appRouter := router.NewRouter(suite.cfg, userHandler, csHandler, authHandler, ideaHandler, rewardHandler, rewardTypeHandler, workerCoffeeShopHandler, likeHandler, categoryHandler, commentHandler, suite.WorkerCoffeeShopRepo, imageHandler, authUsecase, logger)
+	appRouter := router.NewRouter(suite.cfg, userHandler, csHandler, authHandler, ideaHandler, rewardHandler, rewardTypeHandler, workerCoffeeShopHandler, likeHandler, categoryHandler, commentHandler, ideaStatusHandler, suite.WorkerCoffeeShopRepo, imageHandler, authUsecase, logger)
 	suite.Router = appRouter.SetupRouter()
 }
 
@@ -212,6 +217,7 @@ func (suite *BaseTestSuite) TearDownTest() {
 	suite.DB.Exec("DELETE FROM coffee_shop")
 	suite.DB.Exec("DELETE FROM otps")
 	suite.DB.Exec("DELETE FROM users")
+	suite.DB.Exec("DELETE FROM status") // Added DELETE status
 }
 
 // MakeRequest is a helper to make an HTTP request

@@ -2277,6 +2277,85 @@ const docTemplate = `{
                 }
             }
         },
+        "/statuses": {
+            "get": {
+                "description": "Get all idea statuses",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "statuses"
+                ],
+                "summary": "Get all idea statuses",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/dto.IdeaStatusResponse"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/statuses/{id}": {
+            "get": {
+                "description": "Get idea status by ID",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "statuses"
+                ],
+                "summary": "Get idea status by ID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Status ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.IdeaStatusResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/users": {
             "get": {
                 "security": [
@@ -2941,6 +3020,17 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "status_id": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.IdeaStatusResponse": {
+            "type": "object",
+            "properties": {
+                "id": {
                     "type": "string"
                 },
                 "title": {

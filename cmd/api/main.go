@@ -52,12 +52,6 @@ func main() {
 		return
 	}
 
-	// Clean up duplicate likes before migration
-	err = db.Exec(`DELETE FROM idea_like a USING idea_like b WHERE a.id < b.id AND a.user_id = b.user_id AND a.idea_id = b.idea_id`).Error
-	if err != nil {
-		logger.Error("Failed to remove duplicate likes:", slog.String("error", err.Error()))
-	}
-
 	err = db.AutoMigrate(
 		&models.User{},
 		&models.BannedUser{},
@@ -98,9 +92,13 @@ func main() {
 	authUsecase := usecase.NewAuthUsecase(authRepo, coffeeShopRepo, workerCsRepo, db, "1234567890", &cfg.AuthConfig, logger)
 	authHandler := handlers.NewAuthHandler(authUsecase, logger)
 
+	ideaStatusRepo := repository.NewIdeaStatusRepository(db)
+	ideaStatusUsecase := usecase.NewIdeaStatusUsecase(ideaStatusRepo, logger)
+	ideaStatusHandler := handlers.NewIdeaStatusHandler(ideaStatusUsecase, logger)
+
 	ideaRepo := repository.NewIdeaRepository(db)
 	likeRepo := repository.NewLikeRepository(db)
-	ideaUsecase := usecase.NewIdeaUsecase(ideaRepo, workerCsRepo, likeRepo, logger)
+	ideaUsecase := usecase.NewIdeaUsecase(ideaRepo, workerCsRepo, likeRepo, ideaStatusRepo, logger)
 	ideaHandler := handlers.NewIdeaHandler(ideaUsecase, imageUsecase, logger)
 
 	imageHandler := handlers.NewImageHandler(imageUsecase, cfg, logger)
@@ -128,7 +126,7 @@ func main() {
 	commentUsecase := usecase.NewCommentUsecase(commentRepo, ideaRepo, workerCsRepo, logger)
 	commentHandler := handlers.NewCommentHandler(commentUsecase, logger)
 
-	ar := router.NewRouter(cfg, userHandler, csHandler, authHandler, ideaHandler, rewardHandler, rewardTypeHandler, workerCoffeeShopHandler, likeHandler, categoryHandler, commentHandler, workerCsRepo, imageHandler, authUsecase, logger)
+	ar := router.NewRouter(cfg, userHandler, csHandler, authHandler, ideaHandler, rewardHandler, rewardTypeHandler, workerCoffeeShopHandler, likeHandler, categoryHandler, commentHandler, ideaStatusHandler, workerCsRepo, imageHandler, authUsecase, logger)
 	r := ar.SetupRouter()
 	err = r.Run(":8080")
 	if err != nil {

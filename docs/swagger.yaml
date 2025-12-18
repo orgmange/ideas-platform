@@ -150,6 +150,13 @@ definitions:
       title:
         type: string
     type: object
+  dto.IdeaStatusResponse:
+    properties:
+      id:
+        type: string
+      title:
+        type: string
+    type: object
   dto.LogoutRequest:
     properties:
       refresh_token:
@@ -1758,6 +1765,58 @@ paths:
       summary: Get reward type by ID
       tags:
       - rewards
+  /statuses:
+    get:
+      description: Get all idea statuses
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/dto.IdeaStatusResponse'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get all idea statuses
+      tags:
+      - statuses
+  /statuses/{id}:
+    get:
+      description: Get idea status by ID
+      parameters:
+      - description: Status ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.IdeaStatusResponse'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get idea status by ID
+      tags:
+      - statuses
   /users:
     get:
       description: Get a list of all users with optional pagination

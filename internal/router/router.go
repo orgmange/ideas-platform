@@ -26,6 +26,7 @@ type AppRouter struct {
 	likeHandler             *handlers.LikeHandler
 	categoryHandler         *handlers.CategoryHandler
 	commentHandler          *handlers.CommentHandler
+	ideaStatusHandler       *handlers.IdeaStatusHandler
 	workerCoffeeShopRepo    repository.WorkerCoffeeShopRepository
 	imageHandler            *handlers.ImageHandler
 
@@ -44,6 +45,7 @@ func NewRouter(cfg *config.Config,
 	likeHandler *handlers.LikeHandler,
 	categoryHandler *handlers.CategoryHandler,
 	commentHandler *handlers.CommentHandler,
+	ideaStatusHandler *handlers.IdeaStatusHandler,
 	workerCoffeeShopRepo repository.WorkerCoffeeShopRepository,
 	imageHandler *handlers.ImageHandler, // Add this line
 
@@ -62,6 +64,7 @@ func NewRouter(cfg *config.Config,
 		likeHandler:             likeHandler,
 		categoryHandler:         categoryHandler,
 		commentHandler:          commentHandler,
+		ideaStatusHandler:       ideaStatusHandler,
 		workerCoffeeShopRepo:    workerCoffeeShopRepo,
 		imageHandler:            imageHandler, // Add this line
 
@@ -101,6 +104,10 @@ func (ar AppRouter) SetupRouter() *gin.Engine {
 		// categories
 		v1.GET("/coffee-shops/:id/categories", ar.categoryHandler.GetByCoffeeShop)
 		v1.GET("/coffee-shops/:id/categories/:category_id", ar.categoryHandler.GetByID)
+
+		// statuses
+		v1.GET("/statuses", ar.ideaStatusHandler.GetAll)
+		v1.GET("/statuses/:id", ar.ideaStatusHandler.GetByID)
 	}
 
 	authRequired := v1.Group("")
@@ -162,6 +169,11 @@ func (ar AppRouter) SetupRouter() *gin.Engine {
 		adminRequired.POST("/worker-coffee-shops", ar.workerCoffeeShopHandler.AddWorker)
 		adminRequired.DELETE("/worker-coffee-shops/:id", ar.workerCoffeeShopHandler.RemoveWorker)
 		adminRequired.GET("/coffee-shops/:id/workers", ar.workerCoffeeShopHandler.ListWorkersInShop)
+
+		// statuses
+		// adminRequired.POST("/statuses", ar.ideaStatusHandler.Create)
+		// adminRequired.PUT("/statuses/:id", ar.ideaStatusHandler.Update)
+		// adminRequired.DELETE("/statuses/:id", ar.ideaStatusHandler.Delete)
 	}
 	return r
 }

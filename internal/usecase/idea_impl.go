@@ -16,14 +16,16 @@ type IdeaUsecaseImpl struct {
 	ideaRepo     repository.IdeaRepository
 	workerCsRepo repository.WorkerCoffeeShopRepository
 	likeRepo     repository.LikeRepository
+	statusRepo   repository.IdeaStatusRepository
 	logger       *slog.Logger
 }
 
-func NewIdeaUsecase(ideaRepo repository.IdeaRepository, workerCsRepo repository.WorkerCoffeeShopRepository, likeRepo repository.LikeRepository, logger *slog.Logger) IdeaUsecase {
+func NewIdeaUsecase(ideaRepo repository.IdeaRepository, workerCsRepo repository.WorkerCoffeeShopRepository, likeRepo repository.LikeRepository, statusRepo repository.IdeaStatusRepository, logger *slog.Logger) IdeaUsecase {
 	return &IdeaUsecaseImpl{
 		ideaRepo:     ideaRepo,
 		workerCsRepo: workerCsRepo,
 		likeRepo:     likeRepo,
+		statusRepo:   statusRepo,
 		logger:       logger,
 	}
 }
@@ -35,10 +37,24 @@ func (u *IdeaUsecaseImpl) CreateIdea(ctx context.Context, userID uuid.UUID, req 
 	csID := uuid.UUID(req.CoffeeShopID)
 	catID := uuid.UUID(req.CategoryID)
 
+	// Fetch default status "Создана"
+	status, err := u.statusRepo.GetByTitle(ctx, "Создана")
+	var statusID *uuid.UUID
+	if err != nil {
+		logger.Error("failed to get default status 'Создана'", "error", err.Error())
+		// Decide if we should fail or proceed with nil status. 
+		// Proceeding with nil might be safer if the DB wasn't initialized correctly, 
+		// but ideally "Created" should exist.
+		// For now, let's proceed with nil but log the error.
+	} else {
+		statusID = &status.ID
+	}
+
 	idea := &models.Idea{
 		CreatorID:    &userID,
 		CoffeeShopID: &csID,
 		CategoryID:   &catID,
+		StatusID:     statusID,
 		Title:        req.Title,
 		Description:  req.Description,
 		ImageURL:     imageURL,
@@ -134,6 +150,11 @@ func (u *IdeaUsecaseImpl) UpdateIdea(ctx context.Context, userID, ideaID uuid.UU
 		idea.CategoryID = req.CategoryID
 	}
 	if req.StatusID != nil {
+		_, err := u.statusRepo.GetByID(ctx, *req.StatusID)
+		if err != nil {
+			logger.Error("failed to get status", "error", err.Error())
+			return err
+		}
 		idea.StatusID = req.StatusID
 	}
 	if req.Title != nil {
@@ -228,6 +249,7 @@ func toIdeaResponse(idea *models.Idea, likes int) *dto.IdeaResponse {
 		CoffeeShopID: idea.CoffeeShopID,
 		CategoryID:   idea.CategoryID,
 		StatusID:     idea.StatusID,
+		StatusName:   idea.Status.Title,
 		Title:        idea.Title,
 		Description:  idea.Description,
 		ImageURL:     idea.ImageURL,
