@@ -22,7 +22,7 @@ func (r *authRepository) GetOTP(ctx context.Context, phone string) (*models.OTP,
 	var otp models.OTP
 	if err := r.db.WithContext(ctx).Where("phone = ? AND verified = ?", phone, false).First(&otp).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return nil, apperrors.NewErrNotFound("user", phone)
+			return nil, apperrors.NewErrNotFound("otp", phone)
 		}
 		return nil, err
 	}

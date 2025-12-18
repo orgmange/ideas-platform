@@ -151,11 +151,17 @@ func (h *IdeaHandler) GetIdeasFromUser(c *gin.Context) {
 	if !ok {
 		return
 	}
-	var req dto.GetIdeasRequest
-	err := c.ShouldBindJSON(&req)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, dto.ErrorResponse{Message: "bad request"})
-		return
+	pageRaw := c.Query("page")
+	limitRaw := c.Query("limit")
+	sort := c.Query("sort")
+
+	page, _ := strconv.Atoi(pageRaw)
+	limit, _ := strconv.Atoi(limitRaw)
+
+	req := dto.GetIdeasRequest{
+		Page:  page,
+		Limit: limit,
+		Sort:  sort,
 	}
 
 	resp, err := h.uc.GetAllIdeasByUser(c.Request.Context(), userID, req)

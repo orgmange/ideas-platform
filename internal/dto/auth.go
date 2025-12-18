@@ -16,6 +16,12 @@ type AuthResponse struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
+type AdminAuthResponse struct {
+	AccessToken  string    `json:"access_token"`
+	RefreshToken string    `json:"refresh_token"`
+	CoffeeShopID uuid.UUID `json:"coffee_shop_id"`
+}
+
 type JWTClaims struct {
 	jwt.RegisteredClaims
 	UserID       uuid.UUID `json:"user_id"`

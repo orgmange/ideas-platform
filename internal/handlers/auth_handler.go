@@ -75,7 +75,7 @@ func (h *AuthHandler) VerifyOTP(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param request body dto.RegisterAdminRequest true "Admin registration and coffee shop creation request"
-// @Success 200 {object} dto.AuthResponse
+// @Success 200 {object} dto.AdminAuthResponse
 // @Failure 400 {object} dto.ErrorResponse "Bad Request"
 // @Failure 409 {object} dto.ErrorResponse "Conflict (e.g., login already exists)"
 // @Failure 500 {object} dto.ErrorResponse "Internal Server Error"
@@ -103,7 +103,7 @@ func (h *AuthHandler) RegisterAdminAndCoffeeShop(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param request body dto.AdminLoginRequest true "Admin login request"
-// @Success 200 {object} dto.AuthResponse
+// @Success 200 {object} dto.AdminAuthResponse
 // @Failure 400 {object} dto.ErrorResponse "Bad Request"
 // @Failure 401 {object} dto.ErrorResponse "Unauthorized"
 // @Failure 500 {object} dto.ErrorResponse "Internal Server Error"

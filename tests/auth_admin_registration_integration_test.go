@@ -38,11 +38,12 @@ func (suite *AdminRegistrationTestSuite) TestRegisterAdminAndCoffeeShop() {
 
 	suite.Equal(http.StatusOK, w.Code)
 
-	var authResp dto.AuthResponse
+	var authResp dto.AdminAuthResponse
 	err := json.Unmarshal(w.Body.Bytes(), &authResp)
 	suite.NoError(err)
 	suite.NotEmpty(authResp.AccessToken)
 	suite.NotEmpty(authResp.RefreshToken)
+	suite.NotEmpty(authResp.CoffeeShopID)
 
 	// Verify that the user and coffee shop are created in the database
 	var user models.User

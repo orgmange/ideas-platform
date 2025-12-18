@@ -12,8 +12,8 @@ type AuthUsecase interface {
 
 	VerifyOTP(ctx context.Context, req *dto.VerifyOTPRequest) (*dto.AuthResponse, error)
 
-	RegisterAdminAndCoffeeShop(ctx context.Context, req *dto.RegisterAdminRequest) (*dto.AuthResponse, error)
-	LoginAdmin(ctx context.Context, req *dto.AdminLoginRequest) (*dto.AuthResponse, error)
+	RegisterAdminAndCoffeeShop(ctx context.Context, req *dto.RegisterAdminRequest) (*dto.AdminAuthResponse, error)
+	LoginAdmin(ctx context.Context, req *dto.AdminLoginRequest) (*dto.AdminAuthResponse, error)
 	Refresh(ctx context.Context, token string) (*dto.AuthResponse, error)
 
 	Logout(ctx context.Context, token string) error

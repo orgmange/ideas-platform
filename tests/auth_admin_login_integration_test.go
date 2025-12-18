@@ -48,11 +48,12 @@ func (suite *AdminLoginTestSuite) TestLoginAdmin_Success() {
 
 	suite.Equal(http.StatusOK, w.Code)
 
-	var authResp dto.AuthResponse
+	var authResp dto.AdminAuthResponse
 	err := json.Unmarshal(w.Body.Bytes(), &authResp)
 	suite.NoError(err)
 	suite.NotEmpty(authResp.AccessToken)
 	suite.NotEmpty(authResp.RefreshToken)
+	suite.NotEmpty(authResp.CoffeeShopID)
 }
 
 func (suite *AdminLoginTestSuite) TestLoginAdmin_InvalidCredentials() {

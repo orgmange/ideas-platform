@@ -10,6 +10,15 @@ definitions:
     - coffee_shop_id
     - worker_id
     type: object
+  dto.AdminAuthResponse:
+    properties:
+      access_token:
+        type: string
+      coffee_shop_id:
+        type: string
+      refresh_token:
+        type: string
+    type: object
   dto.AdminLoginRequest:
     properties:
       login:
@@ -666,7 +675,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/dto.AuthResponse'
+            $ref: '#/definitions/dto.AdminAuthResponse'
         "400":
           description: Bad Request
           schema:
@@ -735,7 +744,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/dto.AuthResponse'
+            $ref: '#/definitions/dto.AdminAuthResponse'
         "400":
           description: Bad Request
           schema:

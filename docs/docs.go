@@ -602,7 +602,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/dto.AuthResponse"
+                            "$ref": "#/definitions/dto.AdminAuthResponse"
                         }
                     },
                     "400": {
@@ -706,7 +706,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/dto.AuthResponse"
+                            "$ref": "#/definitions/dto.AdminAuthResponse"
                         }
                     },
                     "400": {
@@ -2509,6 +2509,20 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "worker_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.AdminAuthResponse": {
+            "type": "object",
+            "properties": {
+                "access_token": {
+                    "type": "string"
+                },
+                "coffee_shop_id": {
+                    "type": "string"
+                },
+                "refresh_token": {
                     "type": "string"
                 }
             }

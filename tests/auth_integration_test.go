@@ -42,21 +42,33 @@ func (suite *AuthIntegrationTestSuite) TestGetOTP() {
 	}{
 		{
 			name:           "успешное получение OTP",
-			phone:          "1234567890",
+			phone:          "89001112233",
 			expectedStatus: http.StatusNoContent,
 			checkOTPInDB:   true,
 		},
 		{
 			name:           "получение OTP для другого номера",
-			phone:          "9876543210",
+			phone:          "+79004445566",
 			expectedStatus: http.StatusNoContent,
 			checkOTPInDB:   true,
 		},
 		{
 			name:           "получение OTP для нового номера",
-			phone:          "5555555555",
+			phone:          "89007778899",
 			expectedStatus: http.StatusNoContent,
 			checkOTPInDB:   true,
+		},
+		{
+			name:           "невалидный номер телефона",
+			phone:          "invalid",
+			expectedStatus: http.StatusBadRequest,
+			checkOTPInDB:   false,
+		},
+		{
+			name:           "невалидный номер телефона (не русский)",
+			phone:          "+12345678901",
+			expectedStatus: http.StatusBadRequest,
+			checkOTPInDB:   false,
 		},
 	}
 
@@ -95,7 +107,7 @@ func (suite *AuthIntegrationTestSuite) TestVerifyOTP() {
 	}{
 		{
 			name:           "новый пользователь с валидным OTP",
-			phone:          "9876543210",
+			phone:          "89001112234",
 			otpCode:        "123456",
 			userName:       "Test User",
 			existingUser:   false,
@@ -105,7 +117,7 @@ func (suite *AuthIntegrationTestSuite) TestVerifyOTP() {
 		},
 		{
 			name:           "существующий пользователь с валидным OTP",
-			phone:          "1122334455",
+			phone:          "+79002223344",
 			otpCode:        "654321",
 			userName:       "Existing User",
 			existingUser:   true,
@@ -115,7 +127,7 @@ func (suite *AuthIntegrationTestSuite) TestVerifyOTP() {
 		},
 		{
 			name:           "невалидный OTP код",
-			phone:          "1029384756",
+			phone:          "89003334455",
 			otpCode:        "111111",
 			userName:       "",
 			existingUser:   false,
@@ -125,10 +137,20 @@ func (suite *AuthIntegrationTestSuite) TestVerifyOTP() {
 		},
 		{
 			name:           "новый пользователь с другим именем",
-			phone:          "7778889990",
+			phone:          "+79004445567",
 			otpCode:        "999888",
 			userName:       "Another User",
 			existingUser:   false,
+			invalidOTP:     false,
+			expectedStatus: http.StatusOK,
+			checkTokens:    true,
+		},
+		{
+			name:           "существующий пользователь без имени в запросе",
+			phone:          "89005556677",
+			otpCode:        "654321",
+			userName:       "", // Имя не передается в запросе, но пользователь существует (создан в Setup с именем "Existing User")
+			existingUser:   true,
 			invalidOTP:     false,
 			expectedStatus: http.StatusOK,
 			checkTokens:    true,
@@ -197,6 +219,11 @@ func (suite *AuthIntegrationTestSuite) TestVerifyOTP() {
 				suite.NoError(err)
 				if !tt.existingUser {
 					suite.Equal(tt.userName, *user.Name)
+				} else if tt.userName != "" {
+					// Если пользователь существует и мы передали имя (хотя для логина оно не обязательно),
+					// в тесте мы ожидаем, что имя в БД не изменилось или совпадает с тем, что было при создании.
+					// В данном тесте existingUser создается с tt.userName, если оно задано.
+					// Если tt.userName пустое (кейс "без имени"), то мы не проверяем совпадение, так как в БД имя есть.
 				}
 
 				// Проверяем, что OTP удален после успешной верификации
@@ -225,7 +252,7 @@ func (suite *AuthIntegrationTestSuite) TestResendOTP() {
 	}{
 		{
 			name:  "успешная повторная отправка после кулдауна",
-			phone: "1111111111",
+			phone: "89001111111",
 			otpConfig: config.OTPConfig{
 				ExpiresAtTimer:        time.Minute,
 				ResetResendCountTimer: 2 * time.Minute,
@@ -262,7 +289,7 @@ func (suite *AuthIntegrationTestSuite) TestResendOTP() {
 
 		{
 			name:  "ошибка 'слишком много запросов' до кулдауна",
-			phone: "2222222222",
+			phone: "+79002222222",
 			otpConfig: config.OTPConfig{
 				ExpiresAtTimer:        time.Minute,
 				ResetResendCountTimer: 2 * time.Minute,
@@ -294,7 +321,7 @@ func (suite *AuthIntegrationTestSuite) TestResendOTP() {
 		},
 		{
 			name:  "достижение лимита soft-попыток и переход к hard-кулдауну",
-			phone: "3333333333",
+			phone: "89003333333",
 			otpConfig: config.OTPConfig{
 				ExpiresAtTimer:        time.Minute,
 				ResetResendCountTimer: 2 * time.Minute,
@@ -338,7 +365,7 @@ func (suite *AuthIntegrationTestSuite) TestResendOTP() {
 		},
 		{
 			name:  "достижение hard-лимита и полная блокировка",
-			phone: "4444444444",
+			phone: "+79004444444",
 			otpConfig: config.OTPConfig{
 				ExpiresAtTimer:        time.Minute,
 				ResetResendCountTimer: 10 * time.Second,
@@ -407,7 +434,7 @@ func (suite *AuthIntegrationTestSuite) TestRefresh() {
 	}{
 		{
 			name:              "успешное обновление токена",
-			phone:             "5544332211",
+			phone:             "89005556677",
 			otpCode:           "111222",
 			userName:          "Refresh User",
 			waitBeforeRefresh: 1 * time.Second,
@@ -501,7 +528,7 @@ func (suite *AuthIntegrationTestSuite) TestAuthenticatedEndpoints() {
 	}{
 		{
 			name:           "получение данных текущего пользователя с авторизацией",
-			phone:          "111222333",
+			phone:          "89001112233",
 			otpCode:        "123456",
 			userName:       "Auth User",
 			endpoint:       "/api/v1/users/me",
@@ -512,7 +539,7 @@ func (suite *AuthIntegrationTestSuite) TestAuthenticatedEndpoints() {
 		},
 		{
 			name:           "получение данных без авторизации",
-			phone:          "444555666",
+			phone:          "+79004445566",
 			otpCode:        "654321",
 			userName:       "No Auth",
 			endpoint:       "/api/v1/users/me",
@@ -562,7 +589,7 @@ func (suite *AuthIntegrationTestSuite) TestLogout() {
 	}{
 		{
 			name:           "успешный logout - refresh токен удален, access токен истекает через 2 сек",
-			phone:          "1234567890",
+			phone:          "89001234567",
 			otpCode:        "123456",
 			userName:       "Logout User",
 			expectedStatus: http.StatusNoContent,
@@ -632,14 +659,14 @@ func (suite *AuthIntegrationTestSuite) TestLogoutEverywhere() {
 	}{
 		{
 			name:        "выход со всех устройств - все refresh токены удалены",
-			phone:       "1112223334",
+			phone:       "89001112233",
 			otpCode:     "123123",
 			userName:    "Multi Device User",
 			numSessions: 2,
 		},
 		{
 			name:        "выход со всех устройств (3 сессии)",
-			phone:       "5556667778",
+			phone:       "+79004445566",
 			otpCode:     "456456",
 			userName:    "Many Devices User",
 			numSessions: 3,

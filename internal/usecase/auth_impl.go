@@ -54,6 +54,13 @@ func (a *AuthUsecaseImpl) GetOTP(ctx context.Context, phone string) error {
 
 	logger.Debug("starting OTP generation")
 
+	if !validatePhone(phone) {
+		logger.Info("invalid phone format")
+		return apperrors.NewErrNotValid("invalid phone format")
+	}
+
+	phone = normalizePhone(phone)
+
 	savedOTP, err := a.rep.GetOTP(ctx, phone)
 	var errNotFound *apperrors.ErrNotFound
 	if err != nil && !errors.As(err, &errNotFound) {
@@ -157,6 +164,8 @@ func (a *AuthUsecaseImpl) VerifyOTP(ctx context.Context, req *dto.VerifyOTPReque
 		"phone", req.Phone,
 	)
 
+	req.Phone = normalizePhone(req.Phone)
+
 	logger.Debug("Starting virify OTP")
 
 	savedOTP, err := a.rep.GetOTP(ctx, req.Phone)
@@ -164,6 +173,7 @@ func (a *AuthUsecaseImpl) VerifyOTP(ctx context.Context, req *dto.VerifyOTPReque
 		var errNotFound *apperrors.ErrNotFound
 		if errors.As(err, &errNotFound) {
 			logger.Info("Saved OTP not found for this phone")
+			return nil, apperrors.NewErrUnauthorized("otp code not found or expired")
 		} else {
 			logger.Error("failed to get OTP from repository: ", "error", err.Error())
 		}
@@ -430,7 +440,7 @@ func (a *AuthUsecaseImpl) createJWTToken(user *models.User) (*string, error) {
 	return &tokenString, nil
 }
 
-func (a *AuthUsecaseImpl) RegisterAdminAndCoffeeShop(ctx context.Context, req *dto.RegisterAdminRequest) (*dto.AuthResponse, error) {
+func (a *AuthUsecaseImpl) RegisterAdminAndCoffeeShop(ctx context.Context, req *dto.RegisterAdminRequest) (*dto.AdminAuthResponse, error) {
 	logger := a.logger.With(
 		"method", "RegisterAdminAndCoffeeShop",
 		"login", req.Login,
@@ -523,10 +533,20 @@ func (a *AuthUsecaseImpl) RegisterAdminAndCoffeeShop(ctx context.Context, req *d
 	}
 
 	logger.Info("admin and coffee shop registered successfully")
-	return a.makeAuthResponse(ctx, createdUser, "")
+
+	authResp, err := a.makeAuthResponse(ctx, createdUser, "")
+	if err != nil {
+		return nil, err
+	}
+
+	return &dto.AdminAuthResponse{
+		AccessToken:  authResp.AccessToken,
+		RefreshToken: authResp.RefreshToken,
+		CoffeeShopID: createdCoffeeShop.ID,
+	}, nil
 }
 
-func (a *AuthUsecaseImpl) LoginAdmin(ctx context.Context, req *dto.AdminLoginRequest) (*dto.AuthResponse, error) {
+func (a *AuthUsecaseImpl) LoginAdmin(ctx context.Context, req *dto.AdminLoginRequest) (*dto.AdminAuthResponse, error) {
 	logger := a.logger.With(
 		"method", "LoginAdmin",
 		"login", req.Login,
@@ -552,7 +572,25 @@ func (a *AuthUsecaseImpl) LoginAdmin(ctx context.Context, req *dto.AdminLoginReq
 	}
 
 	logger.Info("admin logged in successfully")
-	return a.makeAuthResponse(ctx, user, "")
+
+	authResp, err := a.makeAuthResponse(ctx, user, "")
+	if err != nil {
+		return nil, err
+	}
+
+	var shopID uuid.UUID
+	workers, err := a.workerRepo.ListByWorkerID(ctx, user.ID, 1, 0)
+	if err == nil && len(workers) > 0 && workers[0].CoffeeShopID != nil {
+		shopID = *workers[0].CoffeeShopID
+	} else {
+		logger.Warn("admin has no associated coffee shop", "user_id", user.ID)
+	}
+
+	return &dto.AdminAuthResponse{
+		AccessToken:  authResp.AccessToken,
+		RefreshToken: authResp.RefreshToken,
+		CoffeeShopID: shopID,
+	}, nil
 }
 
 func generateRefreshToken() (string, error) {
